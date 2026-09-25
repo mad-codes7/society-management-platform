@@ -1,0 +1,101 @@
+from __future__ import annotations
+from typing import Optional, List
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.models.person import EmergencyContact, FamilyMember, Person, Resident
+from app.modules.residents.repository import ResidentRepository
+from app.modules.residents.schemas import (
+    EmergencyContactCreate,
+    FamilyMemberCreate,
+    ResidentCreate,
+)
+
+
+class ResidentService:
+
+    def __init__(self):
+        self.repository = ResidentRepository()
+
+    def create_resident(self, db: Session, data: ResidentCreate) -> Resident:
+        person = self.repository.get_person_by_email_or_phone(
+            db, data.person.email, data.person.phone
+        )
+
+        if not person:
+            person = Person(
+                first_name=data.person.first_name,
+                last_name=data.person.last_name,
+                email=data.person.email,
+                phone=data.person.phone,
+                gender=data.person.gender,
+                dob=data.person.dob,
+                blood_group=data.person.blood_group,
+                avatar_url=data.person.avatar_url,
+            )
+            person = self.repository.create_person(db, person)
+
+        resident = Resident(
+            society_id=data.society_id,
+            unit_id=data.unit_id,
+            person_id=person.person_id,
+            resident_type=data.resident_type,
+            occupancy_status=data.occupancy_status,
+            move_in_date=data.move_in_date,
+            is_primary_contact=data.is_primary_contact,
+        )
+
+        resident = self.repository.create_resident(db, resident)
+        db.commit()
+        db.refresh(resident)
+        return resident
+
+    def get_resident(self, db: Session, resident_id: UUID) -> Resident:
+        resident = self.repository.get_resident_by_id(db, resident_id)
+        if not resident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resident not found.",
+            )
+        return resident
+
+    def list_residents(self, db: Session, society_id: UUID, unit_id: Optional[UUID] = None) -> List[Resident]:
+        return self.repository.list_residents_by_society(db, society_id, unit_id)
+
+    def add_family_member(self, db: Session, data: FamilyMemberCreate) -> FamilyMember:
+        resident = self.get_resident(db, data.resident_id)
+        family_member = FamilyMember(
+            resident_id=resident.resident_id,
+            person_id=data.person_id,
+            name=data.name,
+            relationship=data.relationship,
+            phone=data.phone,
+            gender=data.gender,
+            is_dependent=data.is_dependent,
+        )
+        family_member = self.repository.create_family_member(db, family_member)
+        db.commit()
+        db.refresh(family_member)
+        return family_member
+
+    def list_family_members(self, db: Session, resident_id: UUID) -> List[FamilyMember]:
+        return self.repository.list_family_members(db, resident_id)
+
+    def add_emergency_contact(self, db: Session, data: EmergencyContactCreate) -> EmergencyContact:
+        resident = self.get_resident(db, data.resident_id)
+        contact = EmergencyContact(
+            resident_id=resident.resident_id,
+            name=data.name,
+            relationship=data.relationship,
+            phone=data.phone,
+            is_primary=data.is_primary,
+        )
+        contact = self.repository.create_emergency_contact(db, contact)
+        db.commit()
+        db.refresh(contact)
+        return contact
+
+    def list_emergency_contacts(self, db: Session, resident_id: UUID) -> List[EmergencyContact]:
+        return self.repository.list_emergency_contacts(db, resident_id)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional, Tuple, List
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -22,24 +24,24 @@ class SocietyRepository:
         self,
         db: Session,
         society_id: UUID,
-    ) -> Society | None:
+    ) -> Optional[Society]:
         return db.get(Society, society_id)
 
     def get_by_name(
         self,
         db: Session,
         name: str,
-    ) -> Society | None:
+    ) -> Optional[Society]:
         stmt = select(Society).where(Society.name == name)
         return db.scalar(stmt)
 
     def list(
         self,
         db: Session,
-        search: str | None,
+        search: Optional[str],
         limit: int,
         offset: int,
-    ) -> tuple[list[Society], int]:
+    ) -> Tuple[List[Society], int]:
 
         query = select(Society)
 
