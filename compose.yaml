@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:18
+    container_name: society-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: society_management
+      POSTGRES_USER: society_admin
+      POSTGRES_PASSWORD: society_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+volumes:
+  postgres_data:
