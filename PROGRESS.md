@@ -38,7 +38,7 @@ This document tracks all engineering progress, domain models, schema implementat
 | **P1-02** | Create Society (`POST /api/v1/societies`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
 | **P1-03** | View/List/Search Societies (`GET /api/v1/societies`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
 | **P1-04** | Update Society (`PATCH /api/v1/societies/{id}`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
-| **P1-05** | Activate/Suspend Society (`PATCH /api/v1/societies/{id}/status`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
+| **P1-05** | Activate/Suspend Society (`PATCH /api/v1/societies/{id}/activate`, `/suspend`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
 | **P1-PROP** | Property Hierarchy (Buildings, Floors, Unit Types, Units) | ✅ Complete | Member 3 | `feat/society-core-domain` |
 | **P1-RES** | People Master & Resident Relationships | ✅ Complete | Member 3 | `feat/society-core-domain` |
 

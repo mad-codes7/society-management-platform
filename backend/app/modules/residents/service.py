@@ -29,9 +29,16 @@ class ResidentService:
                 detail="Unit does not exist or does not belong to the specified society.",
             )
 
-        person = self.repository.get_person_by_email_or_phone(
-            db, data.person.email, data.person.phone
-        )
+        person_by_email = self.repository.get_person_by_email(db, data.person.email) if data.person.email else None
+        person_by_phone = self.repository.get_person_by_phone(db, data.person.phone) if data.person.phone else None
+
+        if person_by_email and person_by_phone and person_by_email.person_id != person_by_phone.person_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provided email and phone number belong to different existing persons.",
+            )
+
+        person = person_by_email or person_by_phone
 
         if not person:
             person = Person(
@@ -75,6 +82,15 @@ class ResidentService:
 
     def add_family_member(self, db: Session, data: FamilyMemberCreate) -> FamilyMember:
         resident = self.get_resident(db, data.resident_id)
+
+        if data.person_id:
+            person = self.repository.get_person_by_id(db, data.person_id)
+            if not person:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Specified person does not exist.",
+                )
+
         family_member = FamilyMember(
             resident_id=resident.resident_id,
             person_id=data.person_id,

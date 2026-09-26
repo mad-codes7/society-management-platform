@@ -11,16 +11,14 @@ from app.models.person import EmergencyContact, FamilyMember, Person, Resident
 class ResidentRepository:
 
     # Person methods
-    def get_person_by_email_or_phone(self, db: Session, email: Optional[str], phone: Optional[str]) -> Optional[Person]:
-        if email:
-            person = db.scalar(select(Person).where(Person.email == email))
-            if person:
-                return person
-        if phone:
-            person = db.scalar(select(Person).where(Person.phone == phone))
-            if person:
-                return person
-        return None
+    def get_person_by_id(self, db: Session, person_id: UUID) -> Optional[Person]:
+        return db.get(Person, person_id)
+
+    def get_person_by_email(self, db: Session, email: str) -> Optional[Person]:
+        return db.scalar(select(Person).where(Person.email == email))
+
+    def get_person_by_phone(self, db: Session, phone: str) -> Optional[Person]:
+        return db.scalar(select(Person).where(Person.phone == phone))
 
     def create_person(self, db: Session, person: Person) -> Person:
         db.add(person)
