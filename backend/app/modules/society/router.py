@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -38,7 +40,7 @@ def create_society(
     response_model=SocietyListResponse,
 )
 def list_societies(
-    search: str | None = Query(default=None),
+    search: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),

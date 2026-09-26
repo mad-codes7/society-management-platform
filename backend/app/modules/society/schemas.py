@@ -1,4 +1,6 @@
+from __future__ import annotations
 from datetime import datetime
+from typing import Optional, List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -6,20 +8,20 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 class SocietyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
-    registration_no: str | None = Field(default=None, max_length=100)
-    address: str | None = None
-    contact_phone: str | None = Field(default=None, max_length=20)
-    contact_email: EmailStr | None = None
-    logo_path: str | None = Field(default=None, max_length=500)
+    registration_no: Optional[str] = Field(default=None, max_length=100)
+    address: Optional[str] = None
+    contact_phone: Optional[str] = Field(default=None, max_length=20)
+    contact_email: Optional[EmailStr] = None
+    logo_path: Optional[str] = Field(default=None, max_length=500)
 
 
 class SocietyUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=150)
-    registration_no: str | None = Field(default=None, max_length=100)
-    address: str | None = None
-    contact_phone: str | None = Field(default=None, max_length=20)
-    contact_email: EmailStr | None = None
-    logo_path: str | None = Field(default=None, max_length=500)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    registration_no: Optional[str] = Field(default=None, max_length=100)
+    address: Optional[str] = None
+    contact_phone: Optional[str] = Field(default=None, max_length=20)
+    contact_email: Optional[EmailStr] = None
+    logo_path: Optional[str] = Field(default=None, max_length=500)
 
 
 class SocietyResponse(BaseModel):
@@ -27,18 +29,18 @@ class SocietyResponse(BaseModel):
 
     society_id: UUID
     name: str
-    registration_no: str | None
-    address: str | None
-    contact_phone: str | None
-    contact_email: str | None
-    logo_path: str | None
+    registration_no: Optional[str]
+    address: Optional[str]
+    contact_phone: Optional[str]
+    contact_email: Optional[str]
+    logo_path: Optional[str]
     status: str
     created_at: datetime
     updated_at: datetime
 
 
 class SocietyListResponse(BaseModel):
-    items: list[SocietyResponse]
+    items: List[SocietyResponse]
     total: int
     limit: int
     offset: int
