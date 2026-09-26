@@ -12,14 +12,14 @@ class BuildingCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     code: str = Field(min_length=1, max_length=20)
     building_type: str = Field(default="TOWER", max_length=20)
-    total_floors: int = Field(default=1, ge=1)
+    total_floors: int = Field(default=1, ge=1, le=200)
 
 
 class BuildingUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     code: Optional[str] = Field(default=None, max_length=20)
     building_type: Optional[str] = Field(default=None, max_length=20)
-    total_floors: Optional[int] = Field(default=None, ge=1)
+    total_floors: Optional[int] = Field(default=None, ge=1, le=200)
 
 
 class BuildingResponse(BaseModel):

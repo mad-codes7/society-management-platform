@@ -52,6 +52,20 @@ class ResidentService:
                 avatar_url=data.person.avatar_url,
             )
             person = self.repository.create_person(db, person)
+        else:
+            # Update missing/new fields on existing person if provided
+            if data.person.email and not person.email:
+                person.email = data.person.email
+            if data.person.phone and not person.phone:
+                person.phone = data.person.phone
+            if data.person.avatar_url:
+                person.avatar_url = data.person.avatar_url
+            if data.person.gender:
+                person.gender = data.person.gender
+            if data.person.dob:
+                person.dob = data.person.dob
+            if data.person.blood_group:
+                person.blood_group = data.person.blood_group
 
         resident = Resident(
             society_id=data.society_id,

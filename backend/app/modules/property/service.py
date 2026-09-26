@@ -15,15 +15,24 @@ from app.modules.property.schemas import (
     UnitTypeCreate,
     UnitUpdate,
 )
+from app.modules.society.repository import SocietyRepository
 
 
 class PropertyService:
 
     def __init__(self):
         self.repository = PropertyRepository()
+        self.society_repository = SocietyRepository()
 
     # Building methods
     def create_building(self, db: Session, data: BuildingCreate) -> Building:
+        society = self.society_repository.get_by_id(db, data.society_id)
+        if not society:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Specified society does not exist.",
+            )
+
         building = Building(
             society_id=data.society_id,
             name=data.name,
@@ -54,6 +63,13 @@ class PropertyService:
 
     # UnitType methods
     def create_unit_type(self, db: Session, data: UnitTypeCreate) -> UnitType:
+        society = self.society_repository.get_by_id(db, data.society_id)
+        if not society:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Specified society does not exist.",
+            )
+
         unit_type = UnitType(
             society_id=data.society_id,
             name=data.name,

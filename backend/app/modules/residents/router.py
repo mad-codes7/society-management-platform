@@ -48,18 +48,7 @@ def list_residents(
     return service.list_residents(db, society_id, unit_id)
 
 
-@router.get(
-    "/{resident_id}",
-    response_model=ResidentResponse,
-)
-def get_resident(
-    resident_id: UUID,
-    db: Session = Depends(get_db),
-):
-    return service.get_resident(db, resident_id)
-
-
-# Family Member endpoints
+# Family Member endpoints (Static routes declared before generic /{resident_id})
 @router.post(
     "/family-members",
     response_model=FamilyMemberResponse,
@@ -72,18 +61,7 @@ def add_family_member(
     return service.add_family_member(db, data)
 
 
-@router.get(
-    "/{resident_id}/family-members",
-    response_model=List[FamilyMemberResponse],
-)
-def list_family_members(
-    resident_id: UUID,
-    db: Session = Depends(get_db),
-):
-    return service.list_family_members(db, resident_id)
-
-
-# Emergency Contact endpoints
+# Emergency Contact endpoints (Static routes declared before generic /{resident_id})
 @router.post(
     "/emergency-contacts",
     response_model=EmergencyContactResponse,
@@ -94,6 +72,29 @@ def add_emergency_contact(
     db: Session = Depends(get_db),
 ):
     return service.add_emergency_contact(db, data)
+
+
+# Generic Resident ID endpoints
+@router.get(
+    "/{resident_id}",
+    response_model=ResidentResponse,
+)
+def get_resident(
+    resident_id: UUID,
+    db: Session = Depends(get_db),
+):
+    return service.get_resident(db, resident_id)
+
+
+@router.get(
+    "/{resident_id}/family-members",
+    response_model=List[FamilyMemberResponse],
+)
+def list_family_members(
+    resident_id: UUID,
+    db: Session = Depends(get_db),
+):
+    return service.list_family_members(db, resident_id)
 
 
 @router.get(
