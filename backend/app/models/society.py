@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, String, Text
@@ -82,7 +82,7 @@ class SocietySetting(Base, TimestampMixin):
         unique=True,
     )
 
-    financial_year_start: Mapped[Optional[datetime]] = mapped_column(
+    financial_year_start: Mapped[Optional[date]] = mapped_column(
         Date,
         nullable=True,
     )

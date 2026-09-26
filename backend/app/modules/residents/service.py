@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.person import EmergencyContact, FamilyMember, Person, Resident
+from app.modules.property.repository import PropertyRepository
 from app.modules.residents.repository import ResidentRepository
 from app.modules.residents.schemas import (
     EmergencyContactCreate,
@@ -18,8 +19,16 @@ class ResidentService:
 
     def __init__(self):
         self.repository = ResidentRepository()
+        self.property_repository = PropertyRepository()
 
     def create_resident(self, db: Session, data: ResidentCreate) -> Resident:
+        unit = self.property_repository.get_unit_by_id(db, data.unit_id)
+        if not unit or unit.society_id != data.society_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unit does not exist or does not belong to the specified society.",
+            )
+
         person = self.repository.get_person_by_email_or_phone(
             db, data.person.email, data.person.phone
         )

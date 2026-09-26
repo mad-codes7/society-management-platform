@@ -31,6 +31,9 @@ class PropertyRepository:
         db.refresh(floor)
         return floor
 
+    def get_floor_by_id(self, db: Session, floor_id: UUID) -> Optional[Floor]:
+        return db.get(Floor, floor_id)
+
     def list_floors_by_building(self, db: Session, building_id: UUID) -> List[Floor]:
         stmt = select(Floor).where(Floor.building_id == building_id).order_by(Floor.floor_number)
         return list(db.scalars(stmt).all())
@@ -41,6 +44,9 @@ class PropertyRepository:
         db.flush()
         db.refresh(unit_type)
         return unit_type
+
+    def get_unit_type_by_id(self, db: Session, unit_type_id: UUID) -> Optional[UnitType]:
+        return db.get(UnitType, unit_type_id)
 
     def list_unit_types_by_society(self, db: Session, society_id: UUID) -> List[UnitType]:
         stmt = select(UnitType).where(UnitType.society_id == society_id)

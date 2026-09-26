@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional, List
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.person import EmergencyContact, FamilyMember, Person, Resident
@@ -12,15 +12,15 @@ class ResidentRepository:
 
     # Person methods
     def get_person_by_email_or_phone(self, db: Session, email: Optional[str], phone: Optional[str]) -> Optional[Person]:
-        if not email and not phone:
-            return None
-        query = select(Person)
-        conditions = []
         if email:
-            conditions.append(Person.email == email)
+            person = db.scalar(select(Person).where(Person.email == email))
+            if person:
+                return person
         if phone:
-            conditions.append(Person.phone == phone)
-        return db.scalar(query.where(or_(*conditions)))
+            person = db.scalar(select(Person).where(Person.phone == phone))
+            if person:
+                return person
+        return None
 
     def create_person(self, db: Session, person: Person) -> Person:
         db.add(person)

@@ -71,11 +71,26 @@ class PropertyService:
     # Unit methods
     def create_unit(self, db: Session, data: UnitCreate) -> Unit:
         building = self.repository.get_building_by_id(db, data.building_id)
-        if not building:
+        if not building or building.society_id != data.society_id:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Building not found.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Building does not exist or does not belong to the specified society.",
             )
+
+        floor = self.repository.get_floor_by_id(db, data.floor_id)
+        if not floor or floor.building_id != data.building_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Floor does not exist or does not belong to the specified building.",
+            )
+
+        if data.unit_type_id:
+            unit_type = self.repository.get_unit_type_by_id(db, data.unit_type_id)
+            if not unit_type or unit_type.society_id != data.society_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Unit type does not exist or does not belong to the specified society.",
+                )
 
         unit = Unit(
             society_id=data.society_id,
@@ -101,6 +116,14 @@ class PropertyService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Unit not found.",
             )
+
+        if data.unit_type_id:
+            unit_type = self.repository.get_unit_type_by_id(db, data.unit_type_id)
+            if not unit_type or unit_type.society_id != unit.society_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Unit type does not exist or does not belong to the unit's society.",
+                )
 
         values = data.model_dump(exclude_unset=True)
         for field, value in values.items():

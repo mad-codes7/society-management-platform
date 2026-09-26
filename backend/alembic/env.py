@@ -7,14 +7,18 @@ from alembic import context
 
 from app.core.config import settings
 from app.models.base import Base
-from app.models.society import Society
+import app.models  # Ensure all models are registered with Base.metadata
 
 
 config = context.config
 
+db_url = settings.database_url
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
 config.set_main_option(
     "sqlalchemy.url",
-    settings.database_url,
+    db_url,
 )
 
 
