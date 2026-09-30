@@ -1,13 +1,16 @@
 from __future__ import annotations
 import uuid
 from datetime import date
-from typing import Optional, List
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, Date, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship as sqla_relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Person(Base, TimestampMixin):
@@ -61,6 +64,12 @@ class Person(Base, TimestampMixin):
     avatar_url: Mapped[Optional[str]] = mapped_column(
         String(500),
         nullable=True,
+    )
+
+    user: Mapped[Optional["User"]] = sqla_relationship(
+        "User",
+        back_populates="person",
+        uselist=False,
     )
 
     residents: Mapped[List[Resident]] = sqla_relationship(

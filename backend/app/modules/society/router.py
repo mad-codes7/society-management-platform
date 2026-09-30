@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import require_super_admin
 from app.modules.society.schemas import (
     SocietyCreate,
     SocietyListResponse,
@@ -18,6 +19,7 @@ from app.modules.society.service import SocietyService
 router = APIRouter(
     prefix="/api/v1/societies",
     tags=["Societies"],
+    dependencies=[Depends(require_super_admin)],
 )
 
 service = SocietyService()
