@@ -57,6 +57,9 @@ class PropertyService:
     def list_buildings(self, db: Session, society_id: UUID) -> List[Building]:
         return self.repository.list_buildings_by_society(db, society_id)
 
+    def get_building_by_id(self, db: Session, building_id: UUID) -> Optional[Building]:
+        return self.repository.get_building_by_id(db, building_id)
+
     # Floor methods
     def list_floors(self, db: Session, building_id: UUID) -> List[Floor]:
         return self.repository.list_floors_by_building(db, building_id)
@@ -124,6 +127,9 @@ class PropertyService:
 
     def list_units(self, db: Session, society_id: UUID, building_id: Optional[UUID] = None) -> List[Unit]:
         return self.repository.list_units_by_society(db, society_id, building_id)
+
+    def get_unit_by_id(self, db: Session, unit_id: UUID) -> Optional[Unit]:
+        return self.repository.get_unit_by_id(db, unit_id)
 
     def update_unit(self, db: Session, unit_id: UUID, data: UnitUpdate) -> Unit:
         unit = self.repository.get_unit_by_id(db, unit_id)
