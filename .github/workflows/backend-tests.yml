@@ -42,4 +42,6 @@ jobs:
         run: alembic upgrade head
       - name: Run tests
         working-directory: backend
-        run: pytest -q
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q
