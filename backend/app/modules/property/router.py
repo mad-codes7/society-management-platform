@@ -6,6 +6,14 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rbac import require_permission
+from app.core.dependencies import (
+    TenantContext,
+    get_current_user,
+    get_tenant_context,
+    resolve_tenant_context,
+)
+from app.models.user import User
 from app.modules.property.schemas import (
     BuildingCreate,
     BuildingResponse,
@@ -21,6 +29,7 @@ from app.modules.property.service import PropertyService
 router = APIRouter(
     prefix="/api/v1/properties",
     tags=["Properties & Master Data"],
+    dependencies=[Depends(get_current_user)],
 )
 
 service = PropertyService()
@@ -35,19 +44,23 @@ service = PropertyService()
 def create_building(
     data: BuildingCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    resolve_tenant_context(db, current_user, data.society_id)
     return service.create_building(db, data)
 
 
 @router.get(
     "/societies/{society_id}/buildings",
     response_model=List[BuildingResponse],
+    dependencies=[Depends(require_permission("society:read"))],
 )
 def list_buildings(
     society_id: UUID,
     db: Session = Depends(get_db),
+    tenant_context: TenantContext = Depends(get_tenant_context),
 ):
-    return service.list_buildings(db, society_id)
+    return service.list_buildings(db, tenant_context.society_id)
 
 
 # Floor Endpoints
@@ -58,7 +71,11 @@ def list_buildings(
 def list_floors(
     building_id: UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    building = service.get_building_by_id(db, building_id)
+    if building is not None:
+        resolve_tenant_context(db, current_user, building.society_id)
     return service.list_floors(db, building_id)
 
 
@@ -71,7 +88,9 @@ def list_floors(
 def create_unit_type(
     data: UnitTypeCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    resolve_tenant_context(db, current_user, data.society_id)
     return service.create_unit_type(db, data)
 
 
@@ -82,8 +101,9 @@ def create_unit_type(
 def list_unit_types(
     society_id: UUID,
     db: Session = Depends(get_db),
+    tenant_context: TenantContext = Depends(get_tenant_context),
 ):
-    return service.list_unit_types(db, society_id)
+    return service.list_unit_types(db, tenant_context.society_id)
 
 
 # Unit Endpoints
@@ -95,7 +115,9 @@ def list_unit_types(
 def create_unit(
     data: UnitCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    resolve_tenant_context(db, current_user, data.society_id)
     return service.create_unit(db, data)
 
 
@@ -107,8 +129,9 @@ def list_units(
     society_id: UUID,
     building_id: Optional[UUID] = Query(default=None),
     db: Session = Depends(get_db),
+    tenant_context: TenantContext = Depends(get_tenant_context),
 ):
-    return service.list_units(db, society_id, building_id)
+    return service.list_units(db, tenant_context.society_id, building_id)
 
 
 @router.patch(
@@ -119,5 +142,9 @@ def update_unit(
     unit_id: UUID,
     data: UnitUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    unit = service.get_unit_by_id(db, unit_id)
+    if unit is not None:
+        resolve_tenant_context(db, current_user, unit.society_id)
     return service.update_unit(db, unit_id, data)

@@ -1,13 +1,16 @@
 from __future__ import annotations
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship as sqla_relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.user import SocietyMembership
 
 
 class Society(Base, TimestampMixin):
@@ -62,6 +65,12 @@ class Society(Base, TimestampMixin):
         "SocietySetting",
         back_populates="society",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    memberships: Mapped[list["SocietyMembership"]] = sqla_relationship(
+        "SocietyMembership",
+        back_populates="society",
         cascade="all, delete-orphan",
     )
 
