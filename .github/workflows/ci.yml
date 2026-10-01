@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feat/**"]
+  pull_request:
+    branches: [main, develop, "feat/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install linter
+        run: pip install ruff
+
+      - name: Run ruff check
+        run: ruff check .
+
+      - name: Run ruff format check
+        run: ruff format --check .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: lint
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres-main:
+        image: postgres:18
+        env:
+          POSTGRES_DB: society_management
+          POSTGRES_USER: society_admin
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U society_admin -d society_management"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+      postgres-test:
+        image: postgres:18
+        env:
+          POSTGRES_DB: society_management_test
+          POSTGRES_USER: society_admin
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U society_admin -d society_management_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: "postgresql://society_admin:ci_password@localhost:5432/society_management"
+      TEST_DATABASE_URL: "postgresql://society_admin:ci_password@localhost:5433/society_management_test"
+      JWT_SECRET_KEY: "ci-only-not-a-production-secret"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest -v --tb=short
