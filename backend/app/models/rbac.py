@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import uuid
 from typing import Optional
@@ -37,6 +37,12 @@ class Role(Base, TimestampMixin):
 
     role_permissions: Mapped[list["RolePermission"]] = relationship(
         "RolePermission",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+
+    user_roles: Mapped[list["UserRole"]] = relationship(
+        "UserRole",
         back_populates="role",
         cascade="all, delete-orphan",
     )
@@ -112,5 +118,53 @@ class RolePermission(Base, CreatedAtMixin):
             "role_id",
             "permission_id",
             name="uq_role_permissions_role_permission",
+        ),
+    )
+
+
+class UserRole(Base, CreatedAtMixin):
+    __tablename__ = "user_roles"
+
+    user_role_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    membership_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "society_memberships.membership_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "roles.role_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    membership = relationship(
+        "SocietyMembership",
+        back_populates="user_roles",
+    )
+
+    role = relationship(
+        "Role",
+        back_populates="user_roles",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "membership_id",
+            "role_id",
+            name="uq_user_roles_membership_role",
         ),
     )

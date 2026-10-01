@@ -1,10 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from app.models.rbac import Permission, Role, RolePermission, UserRole
 
 from app.core.security import (
     MIN_PASSWORD_LENGTH,
@@ -212,10 +213,50 @@ def test_me_requires_token_and_accepts_valid_token(
 
 def test_member_can_access_society_a_protected_data(
     client: TestClient,
+    db_session: Session,
     tenant_data: dict[str, object],
 ) -> None:
     user = tenant_data["regular_user"]
     society_a = tenant_data["society_a"]
+
+    permission = Permission(
+        code="society:read",
+        description="View society information.",
+        module="society",
+    )
+    role = Role(
+        name=f"Test Society Reader {uuid4().hex}",
+        description="Test role with society read access.",
+        is_active=True,
+    )
+
+    db_session.add_all([permission, role])
+    db_session.flush()
+
+    db_session.add(
+        RolePermission(
+            role_id=role.role_id,
+            permission_id=permission.permission_id,
+        )
+    )
+
+    membership = (
+        db_session.query(SocietyMembership)
+        .filter(
+            SocietyMembership.user_id == user.user_id,
+            SocietyMembership.society_id == society_a.society_id,
+        )
+        .one()
+    )
+
+    db_session.add(
+        UserRole(
+            membership_id=membership.membership_id,
+            role_id=role.role_id,
+        )
+    )
+
+    db_session.flush()
 
     response = client.get(
         f"/api/v1/properties/societies/{society_a.society_id}/buildings",
@@ -482,6 +523,7 @@ def test_regular_user_cannot_assign_membership(
 
 def test_assigned_admin_can_access_only_the_assigned_society(
     client: TestClient,
+    db_session: Session,
     tenant_data: dict[str, object],
 ) -> None:
     super_admin = tenant_data["super_admin"]
@@ -497,6 +539,52 @@ def test_assigned_admin_can_access_only_the_assigned_society(
         json={"society_id": str(society_a.society_id)},
     )
     assert assignment.status_code == 201
+
+    permission = db_session.query(Permission).filter(
+        Permission.code == "society:read"
+    ).first()
+
+    if permission is None:
+        permission = Permission(
+            code="society:read",
+            description="View society information.",
+            module="society",
+        )
+        db_session.add(permission)
+        db_session.flush()
+
+    role = Role(
+        name=f"Test Society Admin {uuid4().hex}",
+        description="Test Society Admin role.",
+        is_active=True,
+    )
+    db_session.add(role)
+    db_session.flush()
+
+    db_session.add(
+        RolePermission(
+            role_id=role.role_id,
+            permission_id=permission.permission_id,
+        )
+    )
+
+    membership = (
+        db_session.query(SocietyMembership)
+        .filter(
+            SocietyMembership.user_id == new_user_id,
+            SocietyMembership.society_id == society_a.society_id,
+        )
+        .one()
+    )
+
+    db_session.add(
+        UserRole(
+            membership_id=membership.membership_id,
+            role_id=role.role_id,
+        )
+    )
+
+    db_session.flush()
 
     login = client.post(
         "/api/v1/auth/login",

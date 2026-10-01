@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import uuid
 from datetime import datetime
@@ -117,4 +117,10 @@ class SocietyMembership(Base, TimestampMixin):
     society: Mapped[Society] = sqla_relationship(
         "Society",
         back_populates="memberships",
+    )
+
+    user_roles: Mapped[List["UserRole"]] = sqla_relationship(
+        "UserRole",
+        back_populates="membership",
+        cascade="all, delete-orphan",
     )

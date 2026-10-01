@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rbac import require_permission
 from app.core.dependencies import (
     TenantContext,
     get_current_user,
@@ -52,6 +53,7 @@ def create_building(
 @router.get(
     "/societies/{society_id}/buildings",
     response_model=List[BuildingResponse],
+    dependencies=[Depends(require_permission("society:read"))],
 )
 def list_buildings(
     society_id: UUID,
