@@ -20,6 +20,11 @@ class AuthRepository:
     def get_user_by_id(self, db: Session, user_id: UUID) -> Optional[User]:
         return db.get(User, user_id)
 
+    def get_membership_by_id(
+        self, db: Session, membership_id: UUID
+    ) -> Optional[SocietyMembership]:
+        return db.get(SocietyMembership, membership_id)
+
     def get_person_by_email(self, db: Session, email: str) -> Optional[Person]:
         statement = select(Person).where(func.lower(Person.email) == normalize_email(email))
         return db.scalar(statement)

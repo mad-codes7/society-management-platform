@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import TenantContext, get_tenant_context
-from app.models.rbac import Permission, RolePermission, UserRole
+from app.models.rbac import Permission, Role, RolePermission, UserRole
 
 
 def require_permission(permission_code: str):
@@ -40,6 +40,8 @@ def require_permission(permission_code: str):
             )
             .where(
                 UserRole.membership_id == tenant_context.membership_id,
+                RolePermission.role_id == Role.role_id,
+                Role.is_active.is_(True),
                 Permission.code == permission_code,
             )
         )

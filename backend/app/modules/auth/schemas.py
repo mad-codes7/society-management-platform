@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
@@ -75,6 +75,19 @@ class SocietyMembershipCreateRequest(BaseModel):
     society_id: UUID
 
 
+class SocietyMembershipUpdateRequest(BaseModel):
+    status: Literal["ACTIVE", "INACTIVE"]
+
+
+class SocietyAdminUpdateRequest(BaseModel):
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    gender: Optional[str] = Field(default=None, max_length=20)
+    dob: Optional[date] = None
+    is_active: Optional[bool] = None
+
+
 class SocietyMembershipCreateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,3 +97,13 @@ class SocietyMembershipCreateResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class SocietyAdminResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    email: EmailStr
+    is_active: bool
+    is_super_admin: bool
+    person: SocietyAdminPersonResponse | None

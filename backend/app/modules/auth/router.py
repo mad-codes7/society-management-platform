@@ -10,8 +10,11 @@ from app.modules.auth.schemas import (
     LoginRequest,
     SocietyAdminCreateRequest,
     SocietyAdminCreateResponse,
+    SocietyAdminResponse,
+    SocietyAdminUpdateRequest,
     SocietyMembershipCreateRequest,
     SocietyMembershipCreateResponse,
+    SocietyMembershipUpdateRequest,
     TokenResponse,
 )
 from app.modules.auth.service import AuthService
@@ -32,9 +35,9 @@ service = AuthService()
 def create_society_admin(
     data: SocietyAdminCreateRequest,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_super_admin),
 ) -> SocietyAdminCreateResponse:
-    return service.create_society_admin(db, data)
+    return service.create_society_admin(db, data, current_user.user_id)
 
 
 @router.post(
@@ -47,8 +50,29 @@ def create_user_membership(
     user_id: UUID,
     data: SocietyMembershipCreateRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ) -> SocietyMembershipCreateResponse:
-    return service.create_society_membership(db, user_id, data)
+    return service.create_society_membership(db, user_id, data, current_user.user_id)
+
+
+@router.patch("/users/{user_id}", response_model=SocietyAdminResponse)
+def update_society_admin(
+    user_id: UUID,
+    data: SocietyAdminUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> SocietyAdminResponse:
+    return service.update_society_admin(db, user_id, data, current_user.user_id)
+
+
+@router.patch("/memberships/{membership_id}", response_model=SocietyMembershipCreateResponse)
+def update_society_membership(
+    membership_id: UUID,
+    data: SocietyMembershipUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> SocietyMembershipCreateResponse:
+    return service.update_membership(db, membership_id, data, current_user.user_id)
 
 
 @router.post("/login", response_model=TokenResponse)

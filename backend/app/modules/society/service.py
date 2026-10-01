@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.society import Society
 from app.modules.society.repository import SocietyRepository
 from app.modules.society.schemas import SocietyCreate, SocietyUpdate
+from app.modules.audit.service import audit_service
 
 
 class SocietyService:
@@ -19,6 +20,7 @@ class SocietyService:
         self,
         db: Session,
         data: SocietyCreate,
+        actor_user_id: Optional[UUID] = None,
     ) -> Society:
 
         existing = self.repository.get_by_name(db, data.name)
@@ -40,6 +42,16 @@ class SocietyService:
         )
 
         society = self.repository.create(db, society)
+
+        audit_service.record(
+            db,
+            action="society_created",
+            entity_type="society",
+            entity_id=society.society_id,
+            actor_user_id=actor_user_id,
+            society_id=society.society_id,
+            after_data={"name": society.name, "status": society.status},
+        )
 
         db.commit()
         db.refresh(society)
@@ -81,6 +93,7 @@ class SocietyService:
         db: Session,
         society_id: UUID,
         data: SocietyUpdate,
+        actor_user_id: Optional[UUID] = None,
     ) -> Society:
 
         society = self.get(db, society_id)
@@ -96,24 +109,51 @@ class SocietyService:
                     detail="Society with this name already exists.",
                 )
 
-        return self.repository.update(
+        before = {field: getattr(society, field) for field in values}
+        society = self.repository.update(
             db=db,
             society=society,
             values=values,
         )
+        audit_service.record(
+            db,
+            action="society_updated",
+            entity_type="society",
+            entity_id=society.society_id,
+            actor_user_id=actor_user_id,
+            society_id=society.society_id,
+            before_data=before,
+            after_data=values,
+        )
+        db.commit()
+        db.refresh(society)
+        return society
 
     def change_status(
         self,
         db: Session,
         society_id: UUID,
         new_status: str,
+        actor_user_id: Optional[UUID] = None,
     ) -> Society:
 
         society = self.get(db, society_id)
 
+        before = {"status": society.status}
         society.status = new_status
 
         db.flush()
+        audit_service.record(
+            db,
+            action="society_status_changed",
+            entity_type="society",
+            entity_id=society.society_id,
+            actor_user_id=actor_user_id,
+            society_id=society.society_id,
+            before_data=before,
+            after_data={"status": society.status},
+        )
+        db.commit()
         db.refresh(society)
 
         return society

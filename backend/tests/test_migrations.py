@@ -26,7 +26,18 @@ def test_alembic_head_upgrades_in_isolated_schema(engine: Engine) -> None:
         with engine.connect() as connection:
             connection.execute(text(f'SET search_path TO "{schema_name}"'))
             table_names = set(inspect(connection).get_table_names())
-            assert {"alembic_version", "persons", "societies", "users", "society_memberships"} <= table_names
+            assert {
+                "alembic_version",
+                "persons",
+                "societies",
+                "users",
+                "society_memberships",
+                "roles",
+                "permissions",
+                "role_permissions",
+                "user_roles",
+                "audit_logs",
+            } <= table_names
     finally:
         if previous_pgoptions is None:
             os.environ.pop("PGOPTIONS", None)

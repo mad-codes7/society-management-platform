@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin
+from app.models.user import User
 from app.modules.society.schemas import (
     SocietyCreate,
     SocietyListResponse,
@@ -33,8 +34,9 @@ service = SocietyService()
 def create_society(
     data: SocietyCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
-    return service.create(db, data)
+    return service.create(db, data, current_user.user_id)
 
 
 @router.get(
@@ -81,8 +83,9 @@ def update_society(
     society_id: UUID,
     data: SocietyUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
-    return service.update(db, society_id, data)
+    return service.update(db, society_id, data, current_user.user_id)
 
 
 @router.patch(
@@ -92,11 +95,13 @@ def update_society(
 def activate_society(
     society_id: UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
     return service.change_status(
         db,
         society_id,
         "ACTIVE",
+        current_user.user_id,
     )
 
 
@@ -107,9 +112,11 @@ def activate_society(
 def suspend_society(
     society_id: UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
 ):
     return service.change_status(
         db,
         society_id,
         "SUSPENDED",
+        current_user.user_id,
     )

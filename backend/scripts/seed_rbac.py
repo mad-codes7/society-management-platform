@@ -73,6 +73,31 @@ PERMISSIONS = [
         "description": "View society information.",
         "module": "society",
     },
+    {
+        "code": "society:manage",
+        "description": "Create and update society master data.",
+        "module": "society",
+    },
+    {
+        "code": "property:read",
+        "description": "View buildings, floors, and units.",
+        "module": "property",
+    },
+    {
+        "code": "property:manage",
+        "description": "Manage property master data.",
+        "module": "property",
+    },
+    {
+        "code": "resident:read",
+        "description": "View resident master data.",
+        "module": "residents",
+    },
+    {
+        "code": "resident:manage",
+        "description": "Manage resident master data.",
+        "module": "residents",
+    },
 ]
 
 
@@ -80,18 +105,24 @@ PERMISSIONS = [
 # This is intentionally minimal because the SRS does not define
 # a complete role-permission matrix.
 ROLE_PERMISSIONS = {
-    "Platform Super Admin": ["society:read"],
-    "Society Admin": ["society:read"],
-    "Chairman/Secretary": ["society:read"],
+    "Platform Super Admin": [
+        "society:read", "society:manage", "property:read", "property:manage",
+        "resident:read", "resident:manage",
+    ],
+    "Society Admin": [
+        "society:read", "society:manage", "property:read", "property:manage",
+        "resident:read", "resident:manage",
+    ],
+    "Chairman/Secretary": ["society:read", "property:read", "resident:read"],
     "Treasurer/Accountant": ["society:read"],
-    "Facility Manager": ["society:read"],
-    "Security Supervisor": ["society:read"],
+    "Facility Manager": ["society:read", "property:read", "property:manage"],
+    "Security Supervisor": ["society:read", "property:read"],
     "Security Guard": ["society:read"],
-    "Owner/Resident": ["society:read"],
-    "Tenant": ["society:read"],
-    "Family Member": ["society:read"],
+    "Owner/Resident": ["society:read", "property:read", "resident:read"],
+    "Tenant": ["society:read", "property:read", "resident:read"],
+    "Family Member": ["society:read", "resident:read"],
     "Vendor": ["society:read"],
-    "Auditor/Read-only": ["society:read"],
+    "Auditor/Read-only": ["society:read", "property:read", "resident:read"],
 }
 
 

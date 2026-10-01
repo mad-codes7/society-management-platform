@@ -1,0 +1,45 @@
+name: Backend tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: society_management
+          POSTGRES_USER: society_admin
+          POSTGRES_PASSWORD: society_dev_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U society_admin -d society_management"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://society_admin:society_dev_password@localhost:5433/society_management
+      TEST_DATABASE_URL: postgresql://society_admin:society_dev_password@localhost:5433/society_management_test
+      JWT_SECRET_KEY: pytest-only-not-a-production-secret
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Create test database
+        run: PGPASSWORD=society_dev_password psql -h localhost -p 5433 -U society_admin -d society_management -c "CREATE DATABASE society_management_test"
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Apply migrations
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Run tests
+        working-directory: backend
+        run: pytest -q

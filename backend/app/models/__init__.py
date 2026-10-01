@@ -3,6 +3,7 @@ from app.models.property import Building, Floor, Unit, UnitType
 from app.models.society import Society, SocietySetting
 from app.models.rbac import Permission, Role, RolePermission, UserRole
 from app.models.user import SocietyMembership, User
+from app.models.audit import AuditLog
 
 __all__ = [
     "Society",
@@ -21,4 +22,5 @@ __all__ = [
     "User",
     "SocietyMembership",
     "UserRole",
+    "AuditLog",
 ]

@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password, normalize_email, verify_password
 from app.models.person import Person
 from app.models.user import SocietyMembership, User
+from app.modules.audit.service import audit_service
 from app.modules.auth.repository import AuthRepository
 from app.modules.society.repository import SocietyRepository
 from app.modules.auth.schemas import (
@@ -19,9 +20,12 @@ from app.modules.auth.schemas import (
     MembershipSummary,
     SocietyAdminCreateRequest,
     SocietyAdminCreateResponse,
+    SocietyAdminResponse,
+    SocietyAdminUpdateRequest,
     SocietyAdminPersonResponse,
     SocietyMembershipCreateRequest,
     SocietyMembershipCreateResponse,
+    SocietyMembershipUpdateRequest,
     TokenResponse,
 )
 
@@ -40,6 +44,7 @@ class AuthService:
         db: Session,
         user_id: UUID,
         data: SocietyMembershipCreateRequest,
+        actor_user_id: Optional[UUID] = None,
     ) -> SocietyMembershipCreateResponse:
         user = self.repository.get_user_by_id(db, user_id)
         if user is None or not user.is_active:
@@ -78,6 +83,15 @@ class AuthService:
         )
         try:
             self.repository.create_membership(db, membership)
+            audit_service.record(
+                db,
+                action="society_admin_assigned",
+                entity_type="society_membership",
+                entity_id=membership.membership_id,
+                actor_user_id=actor_user_id,
+                society_id=data.society_id,
+                after_data={"user_id": str(user_id), "status": membership.status},
+            )
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -95,6 +109,7 @@ class AuthService:
         self,
         db: Session,
         data: SocietyAdminCreateRequest,
+        actor_user_id: Optional[UUID] = None,
     ) -> SocietyAdminCreateResponse:
         email = normalize_email(str(data.email))
         if (
@@ -126,6 +141,14 @@ class AuthService:
         try:
             self.repository.create_person(db, person)
             self.repository.create_user(db, user)
+            audit_service.record(
+                db,
+                action="society_admin_created",
+                entity_type="user",
+                entity_id=user.user_id,
+                actor_user_id=actor_user_id,
+                after_data={"email": user.email, "is_active": user.is_active},
+            )
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -144,6 +167,62 @@ class AuthService:
             is_super_admin=user.is_super_admin,
             person=SocietyAdminPersonResponse.model_validate(person),
         )
+
+    def update_society_admin(
+        self,
+        db: Session,
+        user_id: UUID,
+        data: SocietyAdminUpdateRequest,
+        actor_user_id: Optional[UUID] = None,
+    ) -> SocietyAdminResponse:
+        user = self.repository.get_user_by_id(db, user_id)
+        if user is None or user.is_super_admin or user.person is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Society admin not found.")
+
+        before = {"email": user.email, "is_active": user.is_active}
+        values = data.model_dump(exclude_unset=True)
+        user.is_active = values.pop("is_active", user.is_active)
+        for field, value in values.items():
+            setattr(user.person, field, value)
+
+        audit_service.record(
+            db,
+            action="society_admin_updated",
+            entity_type="user",
+            entity_id=user.user_id,
+            actor_user_id=actor_user_id,
+            before_data=before,
+            after_data={"email": user.email, "is_active": user.is_active},
+        )
+        db.commit()
+        db.refresh(user)
+        return SocietyAdminResponse.model_validate(user)
+
+    def update_membership(
+        self,
+        db: Session,
+        membership_id: UUID,
+        data: SocietyMembershipUpdateRequest,
+        actor_user_id: Optional[UUID] = None,
+    ) -> SocietyMembershipCreateResponse:
+        membership = self.repository.get_membership_by_id(db, membership_id)
+        if membership is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found.")
+        before = {"status": membership.status}
+        membership.status = data.status
+        audit_service.record(
+            db,
+            action="society_admin_membership_updated",
+            entity_type="society_membership",
+            entity_id=membership.membership_id,
+            actor_user_id=actor_user_id,
+            society_id=membership.society_id,
+            before_data=before,
+            after_data={"status": membership.status},
+        )
+        db.commit()
+        db.refresh(membership)
+        return SocietyMembershipCreateResponse.model_validate(membership)
 
     def login(self, db: Session, data: LoginRequest) -> TokenResponse:
         user = self.repository.get_user_by_email(db, normalize_email(str(data.email)))
@@ -167,6 +246,13 @@ class AuthService:
         access_token = create_access_token(str(user.user_id))
 
         self.repository.update_last_login_at(db, user)
+        audit_service.record(
+            db,
+            action="login_succeeded",
+            entity_type="user",
+            entity_id=user.user_id,
+            actor_user_id=user.user_id,
+        )
         db.commit()
 
         return TokenResponse(
