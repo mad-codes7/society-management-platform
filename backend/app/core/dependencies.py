@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
+from app.models.society import Society
 from app.models.user import User
 from app.modules.auth.repository import AuthRepository
 
@@ -86,6 +87,13 @@ def resolve_tenant_context(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this society.",
+        )
+
+    society = db.get(Society, society_id)
+    if society is None or society.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Society is not active.",
         )
 
     return TenantContext(

@@ -6,9 +6,13 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
+from app.modules.audit.repository import AuditRepository
 
 
 class AuditService:
+    def __init__(self, repository: AuditRepository | None = None) -> None:
+        self.repository = repository or AuditRepository()
+
     def record(
         self,
         db: Session,
@@ -33,6 +37,23 @@ class AuditService:
         db.add(entry)
         db.flush()
         return entry
+
+    def list_logs(
+        self,
+        db: Session,
+        *,
+        society_id: UUID | None,
+        action: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AuditLog], int]:
+        return self.repository.list_logs(
+            db,
+            society_id=society_id,
+            action=action,
+            limit=limit,
+            offset=offset,
+        )
 
 
 audit_service = AuditService()

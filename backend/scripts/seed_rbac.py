@@ -98,6 +98,11 @@ PERMISSIONS = [
         "description": "Manage resident master data.",
         "module": "residents",
     },
+    {
+        "code": "audit:read",
+        "description": "View audit records for the permitted society.",
+        "module": "audit",
+    },
 ]
 
 
@@ -108,12 +113,14 @@ ROLE_PERMISSIONS = {
     "Platform Super Admin": [
         "society:read", "society:manage", "property:read", "property:manage",
         "resident:read", "resident:manage",
+        "audit:read",
     ],
     "Society Admin": [
         "society:read", "society:manage", "property:read", "property:manage",
         "resident:read", "resident:manage",
+        "audit:read",
     ],
-    "Chairman/Secretary": ["society:read", "property:read", "resident:read"],
+    "Chairman/Secretary": ["society:read", "property:read", "resident:read", "audit:read"],
     "Treasurer/Accountant": ["society:read"],
     "Facility Manager": ["society:read", "property:read", "property:manage"],
     "Security Supervisor": ["society:read", "property:read"],
@@ -122,7 +129,7 @@ ROLE_PERMISSIONS = {
     "Tenant": ["society:read", "property:read", "resident:read"],
     "Family Member": ["society:read", "resident:read"],
     "Vendor": ["society:read"],
-    "Auditor/Read-only": ["society:read", "property:read", "resident:read"],
+    "Auditor/Read-only": ["society:read", "property:read", "resident:read", "audit:read"],
 }
 
 

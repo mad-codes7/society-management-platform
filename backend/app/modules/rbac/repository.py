@@ -11,6 +11,46 @@ from app.models.user import SocietyMembership
 
 
 class RbacRepository:
+    def create_role(self, db: Session, role: Role) -> Role:
+        db.add(role)
+        db.flush()
+        return role
+
+    def update_role(self, db: Session, role: Role) -> Role:
+        db.flush()
+        return role
+
+    def delete_role(self, db: Session, role: Role) -> None:
+        db.delete(role)
+
+    def create_permission(self, db: Session, permission: Permission) -> Permission:
+        db.add(permission)
+        db.flush()
+        return permission
+
+    def update_permission(self, db: Session, permission: Permission) -> Permission:
+        db.flush()
+        return permission
+
+    def delete_permission(self, db: Session, permission: Permission) -> None:
+        db.delete(permission)
+
+    def create_role_permission(self, db: Session, assignment: RolePermission) -> RolePermission:
+        db.add(assignment)
+        db.flush()
+        return assignment
+
+    def delete_role_permission(self, db: Session, assignment: RolePermission) -> None:
+        db.delete(assignment)
+
+    def create_user_role(self, db: Session, assignment: UserRole) -> UserRole:
+        db.add(assignment)
+        db.flush()
+        return assignment
+
+    def delete_user_role(self, db: Session, assignment: UserRole) -> None:
+        db.delete(assignment)
+
     def list_roles(self, db: Session) -> list[Role]:
         return list(db.scalars(select(Role).order_by(Role.name)).all())
 

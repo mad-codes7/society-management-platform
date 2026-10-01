@@ -176,25 +176,55 @@ class AuthService:
         actor_user_id: Optional[UUID] = None,
     ) -> SocietyAdminResponse:
         user = self.repository.get_user_by_id(db, user_id)
-        if user is None or user.is_super_admin or user.person is None:
+        memberships = [] if user is None else self.repository.get_memberships_for_user(db, user_id)
+        if user is None or user.is_super_admin or user.person is None or not memberships:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Society admin not found.")
 
-        before = {"email": user.email, "is_active": user.is_active}
+        before = {
+            "email": user.email,
+            "first_name": user.person.first_name,
+            "last_name": user.person.last_name,
+            "phone": user.person.phone,
+            "gender": user.person.gender,
+            "date_of_birth": user.person.dob.isoformat() if user.person.dob else None,
+            "is_active": user.is_active,
+        }
         values = data.model_dump(exclude_unset=True)
+        if "email" in values:
+            normalized_email = normalize_email(str(values.pop("email")))
+            existing = self.repository.get_user_by_email(db, normalized_email)
+            if existing is not None and existing.user_id != user.user_id:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already in use.")
+            user.email = normalized_email
+            user.person.email = normalized_email
         user.is_active = values.pop("is_active", user.is_active)
         for field, value in values.items():
             setattr(user.person, field, value)
 
-        audit_service.record(
-            db,
-            action="society_admin_updated",
-            entity_type="user",
-            entity_id=user.user_id,
-            actor_user_id=actor_user_id,
-            before_data=before,
-            after_data={"email": user.email, "is_active": user.is_active},
-        )
-        db.commit()
+        after = {
+            "email": user.email,
+            "first_name": user.person.first_name,
+            "last_name": user.person.last_name,
+            "phone": user.person.phone,
+            "gender": user.person.gender,
+            "date_of_birth": user.person.dob.isoformat() if user.person.dob else None,
+            "is_active": user.is_active,
+        }
+        try:
+            audit_service.record(
+                db,
+                action="society_admin_updated",
+                entity_type="user",
+                entity_id=user.user_id,
+                actor_user_id=actor_user_id,
+                society_id=memberships[0].society_id,
+                before_data=before,
+                after_data=after,
+            )
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Admin update conflicts with existing data.") from None
         db.refresh(user)
         return SocietyAdminResponse.model_validate(user)
 
@@ -208,6 +238,9 @@ class AuthService:
         membership = self.repository.get_membership_by_id(db, membership_id)
         if membership is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found.")
+        society = self.society_repository.get_by_id(db, membership.society_id)
+        if data.status == "ACTIVE" and (society is None or society.status != "ACTIVE"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Society is not active.")
         before = {"status": membership.status}
         membership.status = data.status
         audit_service.record(

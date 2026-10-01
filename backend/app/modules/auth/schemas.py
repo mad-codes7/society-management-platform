@@ -80,6 +80,7 @@ class SocietyMembershipUpdateRequest(BaseModel):
 
 
 class SocietyAdminUpdateRequest(BaseModel):
+    email: Optional[EmailStr] = None
     first_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=20)
