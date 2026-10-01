@@ -1,22 +1,27 @@
 # Society Management Platform
 
-## Create the first Platform Super Admin
+Backend foundation for the Society Management Platform, developed as a modular monolith using FastAPI, SQLAlchemy, PostgreSQL and Alembic.
 
-From the `backend` directory, with `.env` configured and the database migrated to the current Alembic head, run:
+Prototype 1 covers authentication, society administration, RBAC, tenant-aware authorization and audit logging.
 
-```powershell
-python scripts/create_super_admin.py
-```
+## Prototype 1 Backend
 
-Enter the email and password when prompted. The password prompt is hidden; the script asks for confirmation before creating the account.
+The current backend release supports the following demonstration flow:
 
-## Run the backend tests
+- Platform Super Admin login
+- Society creation and management
+- Society Admin creation and assignment
+- Role and permission configuration
+- Authorized and unauthorized API requests
+- Audit log retrieval
 
-Start PostgreSQL with `docker compose up -d db`, create a dedicated database named `society_management_test`, and set both URLs from `backend/.env.test.example` in the shell. The test guard rejects missing or identical normal/test database URLs.
+The backend is documented through FastAPI Swagger/OpenAPI.
 
-From `backend`:
+## Setup
 
-```powershell
-alembic upgrade head
-pytest -q
-```
+### 1. Start PostgreSQL
+
+From the project root:
+
+```bash
+docker compose up -d db
