@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Iterator
+from uuid import uuid4
 
 import pytest
 from dotenv import dotenv_values
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
@@ -92,10 +93,38 @@ def engine():
     if database_url.drivername == "postgresql":
         database_url = database_url.set(drivername="postgresql+psycopg")
 
+    schema_name = f"pytest_{uuid4().hex}"
+    bootstrap_engine = create_engine(database_url, pool_pre_ping=True)
+    with bootstrap_engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public"))
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+    bootstrap_engine.dispose()
+
     test_engine = create_engine(database_url, pool_pre_ping=True)
-    Base.metadata.create_all(test_engine)
-    yield test_engine
-    test_engine.dispose()
+
+    @event.listens_for(test_engine, "connect")
+    def set_test_schema(dbapi_connection, _connection_record) -> None:
+        if os.environ.get("PGOPTIONS"):
+            return
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path TO "{schema_name}", public')
+        finally:
+            cursor.close()
+
+    with test_engine.begin() as connection:
+        isolated_connection = connection.execution_options(
+            schema_translate_map={None: schema_name}
+        )
+        Base.metadata.create_all(isolated_connection)
+    try:
+        yield test_engine
+    finally:
+        test_engine.dispose()
+        cleanup_engine = create_engine(database_url, pool_pre_ping=True)
+        with cleanup_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        cleanup_engine.dispose()
 
 
 @pytest.fixture

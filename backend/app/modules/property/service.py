@@ -39,16 +39,18 @@ class PropertyService:
             code=data.code,
             building_type=data.building_type,
             total_floors=data.total_floors,
+            status=data.status,
         )
         building = self.repository.create_building(db, building)
 
-        for floor_num in range(1, data.total_floors + 1):
-            floor = Floor(
-                building_id=building.building_id,
-                floor_number=floor_num,
-                floor_name=f"Floor {floor_num}",
-            )
-            self.repository.create_floor(db, floor)
+        if data.total_floors is not None:
+            for floor_num in range(1, data.total_floors + 1):
+                floor = Floor(
+                    building_id=building.building_id,
+                    floor_number=floor_num,
+                    name=f"Floor {floor_num}",
+                )
+                self.repository.create_floor(db, floor)
 
         db.commit()
         db.refresh(building)
@@ -76,8 +78,10 @@ class PropertyService:
         unit_type = UnitType(
             society_id=data.society_id,
             name=data.name,
-            super_builtup_area=data.super_builtup_area,
-            carpet_area=data.carpet_area,
+            description=data.description,
+            default_area=data.default_area,
+            area_unit=data.area_unit,
+            is_active=data.is_active,
         )
         unit_type = self.repository.create_unit_type(db, unit_type)
         db.commit()
@@ -118,7 +122,7 @@ class PropertyService:
             unit_type_id=data.unit_type_id,
             unit_number=data.unit_number,
             occupancy_status=data.occupancy_status,
-            is_commercial=data.is_commercial,
+            area=data.area,
         )
         unit = self.repository.create_unit(db, unit)
         db.commit()

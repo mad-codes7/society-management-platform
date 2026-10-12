@@ -38,7 +38,7 @@ class AuthRepository:
         return db.scalar(statement)
 
     def get_person_by_phone(self, db: Session, phone: str) -> Optional[Person]:
-        statement = select(Person).where(Person.phone == phone)
+        statement = select(Person).where(Person.mobile == phone)
         return db.scalar(statement)
 
     def create_person(self, db: Session, person: Person) -> Person:

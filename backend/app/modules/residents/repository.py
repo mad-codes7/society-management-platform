@@ -18,7 +18,7 @@ class ResidentRepository:
         return db.scalar(select(Person).where(Person.email == email))
 
     def get_person_by_phone(self, db: Session, phone: str) -> Optional[Person]:
-        return db.scalar(select(Person).where(Person.phone == phone))
+        return db.scalar(select(Person).where(Person.mobile == phone))
 
     def create_person(self, db: Session, person: Person) -> Person:
         db.add(person)

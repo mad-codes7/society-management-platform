@@ -123,12 +123,11 @@ class AuthService:
             )
 
         person = Person(
-            first_name=data.first_name,
-            last_name=data.last_name,
+            full_name=f"{data.first_name} {data.last_name}",
             email=email,
-            phone=data.phone,
+            mobile=data.phone,
             gender=data.gender,
-            dob=data.dob,
+            date_of_birth=data.dob,
         )
         user = User(
             email=email,
@@ -182,11 +181,14 @@ class AuthService:
 
         before = {
             "email": user.email,
-            "first_name": user.person.first_name,
-            "last_name": user.person.last_name,
-            "phone": user.person.phone,
+            "first_name": user.person.full_name.split(" ", 1)[0],
+            "last_name": user.person.full_name.split(" ", 1)[1] if " " in user.person.full_name else "",
+            "full_name": user.person.full_name,
+            "mobile": user.person.mobile,
+            "phone": user.person.mobile,
             "gender": user.person.gender,
-            "date_of_birth": user.person.dob.isoformat() if user.person.dob else None,
+            "date_of_birth": user.person.date_of_birth.isoformat() if user.person.date_of_birth else None,
+            "dob": user.person.date_of_birth.isoformat() if user.person.date_of_birth else None,
             "is_active": user.is_active,
         }
         values = data.model_dump(exclude_unset=True)
@@ -198,16 +200,30 @@ class AuthService:
             user.email = normalized_email
             user.person.email = normalized_email
         user.is_active = values.pop("is_active", user.is_active)
+        first_name = values.pop("first_name", None)
+        last_name = values.pop("last_name", None)
+        if first_name is not None or last_name is not None:
+            current_first, _, current_last = user.person.full_name.partition(" ")
+            user.person.full_name = " ".join(
+                item for item in (first_name or current_first, last_name or current_last) if item
+            )
+        if "phone" in values:
+            user.person.mobile = values.pop("phone")
+        if "dob" in values:
+            user.person.date_of_birth = values.pop("dob")
         for field, value in values.items():
             setattr(user.person, field, value)
 
         after = {
             "email": user.email,
-            "first_name": user.person.first_name,
-            "last_name": user.person.last_name,
-            "phone": user.person.phone,
+            "first_name": user.person.full_name.split(" ", 1)[0],
+            "last_name": user.person.full_name.split(" ", 1)[1] if " " in user.person.full_name else "",
+            "full_name": user.person.full_name,
+            "mobile": user.person.mobile,
+            "phone": user.person.mobile,
             "gender": user.person.gender,
-            "date_of_birth": user.person.dob.isoformat() if user.person.dob else None,
+            "date_of_birth": user.person.date_of_birth.isoformat() if user.person.date_of_birth else None,
+            "dob": user.person.date_of_birth.isoformat() if user.person.date_of_birth else None,
             "is_active": user.is_active,
         }
         try:
@@ -259,7 +275,7 @@ class AuthService:
 
     def login(self, db: Session, data: LoginRequest) -> TokenResponse:
         user = self.repository.get_user_by_email(db, normalize_email(str(data.email)))
-        if user is None or not verify_password(
+        if user is None or user.password_hash is None or not verify_password(
             data.password.get_secret_value(),
             user.password_hash,
         ):
