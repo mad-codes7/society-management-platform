@@ -61,6 +61,7 @@ class Building(Base, TimestampMixin):
         "Unit",
         back_populates="building",
         cascade="all, delete-orphan",
+        foreign_keys="Unit.building_id",
     )
 
 
@@ -103,6 +104,7 @@ class Floor(Base, TimestampMixin):
         "Unit",
         back_populates="floor",
         cascade="all, delete-orphan",
+        foreign_keys="Unit.floor_id",
     )
 
 
@@ -144,6 +146,7 @@ class UnitType(Base, TimestampMixin):
     units: Mapped[List[Unit]] = relationship(
         "Unit",
         back_populates="unit_type",
+        foreign_keys="Unit.unit_type_id",
     )
 
 
@@ -206,14 +209,17 @@ class Unit(Base, TimestampMixin):
     building: Mapped[Building] = relationship(
         "Building",
         back_populates="units",
+        foreign_keys="Unit.building_id",
     )
 
     floor: Mapped[Floor] = relationship(
         "Floor",
         back_populates="units",
+        foreign_keys="Unit.floor_id",
     )
 
     unit_type: Mapped[Optional[UnitType]] = relationship(
         "UnitType",
         back_populates="units",
+        foreign_keys="Unit.unit_type_id",
     )

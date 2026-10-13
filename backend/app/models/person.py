@@ -126,13 +126,14 @@ class Resident(Base, TimestampMixin):
         "FamilyMember",
         back_populates="resident",
         cascade="all, delete-orphan",
-        foreign_keys="[FamilyMember.resident_id]",
+        foreign_keys="FamilyMember.resident_id",
     )
 
     emergency_contacts: Mapped[List[EmergencyContact]] = sqla_relationship(
         "EmergencyContact",
         back_populates="resident",
         cascade="all, delete-orphan",
+        foreign_keys="EmergencyContact.resident_id",
     )
 
 
@@ -183,7 +184,7 @@ class FamilyMember(Base, TimestampMixin):
     resident: Mapped[Resident] = sqla_relationship(
         "Resident",
         back_populates="family_members",
-        foreign_keys="[FamilyMember.resident_id]",
+        foreign_keys="FamilyMember.resident_id",
     )
 
 
@@ -235,4 +236,5 @@ class EmergencyContact(Base, TimestampMixin):
     resident: Mapped[Resident] = sqla_relationship(
         "Resident",
         back_populates="emergency_contacts",
+        foreign_keys="EmergencyContact.resident_id",
     )
