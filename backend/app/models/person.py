@@ -126,6 +126,7 @@ class Resident(Base, TimestampMixin):
         "FamilyMember",
         back_populates="resident",
         cascade="all, delete-orphan",
+        foreign_keys="[FamilyMember.resident_id]",
     )
 
     emergency_contacts: Mapped[List[EmergencyContact]] = sqla_relationship(
@@ -182,6 +183,7 @@ class FamilyMember(Base, TimestampMixin):
     resident: Mapped[Resident] = sqla_relationship(
         "Resident",
         back_populates="family_members",
+        foreign_keys="[FamilyMember.resident_id]",
     )
 
 
