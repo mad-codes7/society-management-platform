@@ -81,6 +81,9 @@ def test_alembic_head_upgrades_in_isolated_schema(engine: Engine) -> None:
 
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+            
+        # Kill pooled connections that were pointing to the dropped schema
+        engine.dispose()
 
 
 def test_v2_backfills_unlinked_users_without_changing_authentication_data(engine: Engine) -> None:
@@ -168,3 +171,6 @@ def test_v2_backfills_unlinked_users_without_changing_authentication_data(engine
 
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+            
+        # Kill pooled connections that were pointing to the dropped schema
+        engine.dispose()

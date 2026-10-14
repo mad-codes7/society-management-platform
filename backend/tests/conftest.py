@@ -102,8 +102,8 @@ def engine():
 
     test_engine = create_engine(database_url, pool_pre_ping=True)
 
-    @event.listens_for(test_engine, "connect")
-    def set_test_schema(dbapi_connection, _connection_record) -> None:
+    @event.listens_for(test_engine, "checkout")
+    def set_test_schema(dbapi_connection, _connection_record, _connection_proxy) -> None:
         if os.environ.get("PGOPTIONS"):
             return
         cursor = dbapi_connection.cursor()
@@ -111,6 +111,7 @@ def engine():
             cursor.execute(f'SET search_path TO "{schema_name}", public')
         finally:
             cursor.close()
+        dbapi_connection.commit()
 
     with test_engine.begin() as connection:
         isolated_connection = connection.execution_options(
