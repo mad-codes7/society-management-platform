@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.models.history import OccupancyHistory
 from app.models.person import EmergencyContact, FamilyMember, Person, Resident
 from app.modules.property.repository import PropertyRepository
 from app.modules.residents.repository import ResidentRepository
@@ -42,42 +43,48 @@ class ResidentService:
 
         if not person:
             person = Person(
-                first_name=data.person.first_name,
-                last_name=data.person.last_name,
+                full_name=f"{data.person.first_name} {data.person.last_name}",
                 email=data.person.email,
-                phone=data.person.phone,
+                mobile=data.person.phone,
                 gender=data.person.gender,
-                dob=data.person.dob,
-                blood_group=data.person.blood_group,
-                avatar_url=data.person.avatar_url,
+                date_of_birth=data.person.dob,
+                profile_photo_path=data.person.avatar_url,
             )
             person = self.repository.create_person(db, person)
         else:
             # Update missing/new fields on existing person if provided
             if data.person.email and not person.email:
                 person.email = data.person.email
-            if data.person.phone and not person.phone:
-                person.phone = data.person.phone
+            if data.person.phone and not person.mobile:
+                person.mobile = data.person.phone
             if data.person.avatar_url:
-                person.avatar_url = data.person.avatar_url
+                person.profile_photo_path = data.person.avatar_url
             if data.person.gender:
                 person.gender = data.person.gender
             if data.person.dob:
-                person.dob = data.person.dob
-            if data.person.blood_group:
-                person.blood_group = data.person.blood_group
+                person.date_of_birth = data.person.dob
 
         resident = Resident(
             society_id=data.society_id,
             unit_id=data.unit_id,
             person_id=person.person_id,
             resident_type=data.resident_type,
-            occupancy_status=data.occupancy_status,
-            move_in_date=data.move_in_date,
-            is_primary_contact=data.is_primary_contact,
+            status=data.occupancy_status,
+            is_primary=data.is_primary_contact,
         )
 
         resident = self.repository.create_resident(db, resident)
+        if data.move_in_date is not None:
+            db.add(
+                OccupancyHistory(
+                    society_id=data.society_id,
+                    unit_id=data.unit_id,
+                    person_id=person.person_id,
+                    occupancy_type=data.resident_type,
+                    move_in_date=data.move_in_date,
+                    status=data.occupancy_status,
+                )
+            )
         db.commit()
         db.refresh(resident)
         return resident
@@ -97,6 +104,12 @@ class ResidentService:
     def add_family_member(self, db: Session, data: FamilyMemberCreate) -> FamilyMember:
         resident = self.get_resident(db, data.resident_id)
 
+        if any((data.name, data.phone, data.gender)) or data.is_dependent is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="name, phone, gender and is_dependent are legacy fields without V2 destinations; use person_id, emergency_contact and app_access_enabled.",
+            )
+
         if data.person_id:
             person = self.repository.get_person_by_id(db, data.person_id)
             if not person:
@@ -106,13 +119,12 @@ class ResidentService:
                 )
 
         family_member = FamilyMember(
+            society_id=resident.society_id,
             resident_id=resident.resident_id,
             person_id=data.person_id,
-            name=data.name,
             relationship=data.relationship,
-            phone=data.phone,
-            gender=data.gender,
-            is_dependent=data.is_dependent,
+            emergency_contact=data.emergency_contact,
+            app_access_enabled=data.app_access_enabled,
         )
         family_member = self.repository.create_family_member(db, family_member)
         db.commit()
@@ -124,12 +136,19 @@ class ResidentService:
 
     def add_emergency_contact(self, db: Session, data: EmergencyContactCreate) -> EmergencyContact:
         resident = self.get_resident(db, data.resident_id)
+        if data.person_id and not self.repository.get_person_by_id(db, data.person_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Specified person does not exist.",
+            )
         contact = EmergencyContact(
+            society_id=resident.society_id,
             resident_id=resident.resident_id,
+            person_id=data.person_id,
             name=data.name,
             relationship=data.relationship,
-            phone=data.phone,
-            is_primary=data.is_primary,
+            mobile=data.mobile or data.phone,
+            priority=data.priority,
         )
         contact = self.repository.create_emergency_contact(db, contact)
         db.commit()

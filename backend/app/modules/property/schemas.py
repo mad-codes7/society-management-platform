@@ -10,16 +10,18 @@ from pydantic import BaseModel, ConfigDict, Field
 class BuildingCreate(BaseModel):
     society_id: UUID
     name: str = Field(min_length=1, max_length=100)
-    code: str = Field(min_length=1, max_length=20)
-    building_type: str = Field(default="TOWER", max_length=20)
-    total_floors: int = Field(default=1, ge=1, le=200)
+    code: Optional[str] = Field(default=None, max_length=30)
+    building_type: Optional[str] = Field(default=None, max_length=30)
+    total_floors: Optional[int] = Field(default=None, ge=1, le=200)
+    status: str = Field(default="ACTIVE", max_length=20)
 
 
 class BuildingUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    code: Optional[str] = Field(default=None, max_length=20)
-    building_type: Optional[str] = Field(default=None, max_length=20)
+    code: Optional[str] = Field(default=None, max_length=30)
+    building_type: Optional[str] = Field(default=None, max_length=30)
     total_floors: Optional[int] = Field(default=None, ge=1, le=200)
+    status: Optional[str] = Field(default=None, max_length=20)
 
 
 class BuildingResponse(BaseModel):
@@ -28,9 +30,10 @@ class BuildingResponse(BaseModel):
     building_id: UUID
     society_id: UUID
     name: str
-    code: str
-    building_type: str
-    total_floors: int
+    code: Optional[str]
+    building_type: Optional[str]
+    total_floors: Optional[int]
+    status: str
     created_at: datetime
     updated_at: datetime
 
@@ -39,7 +42,7 @@ class BuildingResponse(BaseModel):
 class FloorCreate(BaseModel):
     building_id: UUID
     floor_number: int
-    floor_name: Optional[str] = Field(default=None, max_length=50)
+    name: Optional[str] = Field(default=None, max_length=50)
 
 
 class FloorResponse(BaseModel):
@@ -48,7 +51,7 @@ class FloorResponse(BaseModel):
     floor_id: UUID
     building_id: UUID
     floor_number: int
-    floor_name: Optional[str]
+    name: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -56,9 +59,11 @@ class FloorResponse(BaseModel):
 # UnitType Schemas
 class UnitTypeCreate(BaseModel):
     society_id: UUID
-    name: str = Field(min_length=1, max_length=100)
-    super_builtup_area: Optional[float] = None
-    carpet_area: Optional[float] = None
+    name: str = Field(min_length=1, max_length=50)
+    description: Optional[str] = Field(default=None, max_length=200)
+    default_area: Optional[float] = None
+    area_unit: Optional[str] = Field(default=None, max_length=20)
+    is_active: bool = True
 
 
 class UnitTypeResponse(BaseModel):
@@ -67,8 +72,10 @@ class UnitTypeResponse(BaseModel):
     unit_type_id: UUID
     society_id: UUID
     name: str
-    super_builtup_area: Optional[float]
-    carpet_area: Optional[float]
+    description: Optional[str]
+    default_area: Optional[float]
+    area_unit: Optional[str]
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 
@@ -79,15 +86,14 @@ class UnitCreate(BaseModel):
     building_id: UUID
     floor_id: UUID
     unit_type_id: Optional[UUID] = None
-    unit_number: str = Field(min_length=1, max_length=20)
+    unit_number: str = Field(min_length=1, max_length=30)
+    area: Optional[float] = None
     occupancy_status: str = Field(default="VACANT", max_length=20)
-    is_commercial: bool = Field(default=False)
 
 
 class UnitUpdate(BaseModel):
     unit_type_id: Optional[UUID] = None
     occupancy_status: Optional[str] = Field(default=None, max_length=20)
-    is_commercial: Optional[bool] = None
 
 
 class UnitResponse(BaseModel):
@@ -100,6 +106,5 @@ class UnitResponse(BaseModel):
     unit_type_id: Optional[UUID]
     unit_number: str
     occupancy_status: str
-    is_commercial: bool
     created_at: datetime
     updated_at: datetime

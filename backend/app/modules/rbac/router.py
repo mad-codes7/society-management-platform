@@ -32,7 +32,7 @@ def update_role(role_id: UUID, data: RoleUpdate, db: Session = Depends(get_db), 
 
 
 @router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_role(role_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)) -> None:
+def delete_role(role_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
     service.delete_role(db, role_id, current_user.user_id)
 
 
@@ -52,25 +52,25 @@ def update_permission(permission_id: UUID, data: PermissionUpdate, db: Session =
 
 
 @router.delete("/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_permission(permission_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)) -> None:
+def delete_permission(permission_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
     service.delete_permission(db, permission_id, current_user.user_id)
 
 
 @router.post("/roles/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
-def assign_permission(role_id: UUID, permission_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)) -> None:
+def assign_permission(role_id: UUID, permission_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
     service.assign_permission(db, role_id, permission_id, current_user.user_id)
 
 
 @router.delete("/roles/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_permission(role_id: UUID, permission_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)) -> None:
+def remove_permission(role_id: UUID, permission_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
     service.remove_permission(db, role_id, permission_id, current_user.user_id)
 
 
 @router.post("/memberships/{membership_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
-def assign_role(membership_id: UUID, role_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)) -> None:
+def assign_role(membership_id: UUID, role_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
     service.assign_role(db, membership_id, role_id, current_user.user_id)
 
 
 @router.delete("/memberships/{membership_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_role(membership_id: UUID, role_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)) -> None:
+def remove_role(membership_id: UUID, role_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
     service.remove_role(db, membership_id, role_id, current_user.user_id)

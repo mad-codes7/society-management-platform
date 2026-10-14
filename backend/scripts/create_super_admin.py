@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import SessionLocal
 from app.core.security import MIN_PASSWORD_LENGTH, hash_password, normalize_email
+from app.models.person import Person
 from app.models.user import User
 
 
@@ -43,10 +44,11 @@ def main() -> int:
             print(f"Error: an account already exists for {email}.", file=sys.stderr)
             return 1
 
+        person = Person(full_name=email, email=email, status="ACTIVE")
         user = User(
             email=email,
             password_hash=hash_password(password),
-            person_id=None,
+            person=person,
             is_active=True,
             is_super_admin=True,
         )

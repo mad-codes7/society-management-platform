@@ -28,21 +28,25 @@ def tenant_data(db_session: Session) -> dict[str, object]:
     society_a = Society(name=f"Auth Tenant A {suffix}", status="ACTIVE")
     society_b = Society(name=f"Auth Tenant B {suffix}", status="ACTIVE")
     regular_user = User(
+        person=Person(full_name="Regular User"),
         email=f"regular-{suffix}@example.com",
         password_hash=hash_password(PASSWORD),
         is_active=True,
     )
     inactive_membership_user = User(
+        person=Person(full_name="Inactive Member"),
         email=f"inactive-member-{suffix}@example.com",
         password_hash=hash_password(PASSWORD),
         is_active=True,
     )
     inactive_user = User(
+        person=Person(full_name="Inactive User"),
         email=f"inactive-user-{suffix}@example.com",
         password_hash=hash_password(PASSWORD),
         is_active=False,
     )
     super_admin = User(
+        person=Person(full_name="Super Admin"),
         email=f"super-admin-{suffix}@example.com",
         password_hash=hash_password(PASSWORD),
         is_active=True,
@@ -100,7 +104,7 @@ def tenant_data(db_session: Session) -> dict[str, object]:
         floor_id=floor_b.floor_id,
         unit_number="B-101",
     )
-    person_b = Person(first_name="Test", last_name="Resident")
+    person_b = Person(full_name="Test Resident")
     db_session.add_all([unit_a, unit_b, person_b])
     db_session.flush()
 

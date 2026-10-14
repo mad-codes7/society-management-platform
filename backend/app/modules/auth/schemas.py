@@ -51,12 +51,13 @@ class SocietyAdminPersonResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     person_id: UUID
-    first_name: str
-    last_name: str
+    full_name: str
     email: EmailStr | None
-    phone: str | None
+    mobile: str | None
     gender: str | None
-    dob: date | None
+    date_of_birth: date | None
+    profile_photo_path: str | None
+    status: str
 
 
 class SocietyAdminCreateResponse(BaseModel):

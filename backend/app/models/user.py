@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship as sqla_relationship
 
@@ -22,10 +22,10 @@ class User(Base, TimestampMixin):
         default=uuid.uuid4,
     )
 
-    person_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    person_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("persons.person_id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("persons.person_id", ondelete="RESTRICT"),
+        nullable=False,
         unique=True,
         index=True,
     )
@@ -37,9 +37,9 @@ class User(Base, TimestampMixin):
         index=True,
     )
 
-    password_hash: Mapped[str] = mapped_column(
+    password_hash: Mapped[Optional[str]] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -108,6 +108,9 @@ class SocietyMembership(Base, TimestampMixin):
         nullable=False,
         default="ACTIVE",
     )
+
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    left_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = sqla_relationship(
         "User",
