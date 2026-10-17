@@ -1,9 +1,10 @@
 ﻿from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +26,8 @@ class Role(Base, TimestampMixin):
         unique=True,
     )
 
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+
     description: Mapped[Optional[str]] = mapped_column(
         String(255),
         nullable=True,
@@ -45,6 +48,10 @@ class Role(Base, TimestampMixin):
         "UserRole",
         back_populates="role",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_roles_code"),
     )
 
 
@@ -151,6 +158,18 @@ class UserRole(Base, CreatedAtMixin):
         index=True,
     )
 
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    valid_to: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="ACTIVE", server_default="ACTIVE"
+    )
+
     membership = relationship(
         "SocietyMembership",
         back_populates="user_roles",
@@ -167,4 +186,6 @@ class UserRole(Base, CreatedAtMixin):
             "role_id",
             name="uq_user_roles_membership_role",
         ),
+        Index("ix_user_roles_status", "status"),
+        CheckConstraint("valid_to IS NULL OR valid_to > valid_from", name="ck_user_roles_valid_dates"),
     )

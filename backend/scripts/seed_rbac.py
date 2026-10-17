@@ -15,50 +15,62 @@ from app.models.rbac import Permission, Role, RolePermission
 ROLES = [
     {
         "name": "Platform Super Admin",
+        "code": "platform_super_admin",
         "description": "Platform-level administrator with access across societies.",
     },
     {
         "name": "Society Admin",
+        "code": "society_admin",
         "description": "Administrator responsible for managing a society.",
     },
     {
         "name": "Chairman/Secretary",
+        "code": "chairman_secretary",
         "description": "Society leadership role for administrative and governance activities.",
     },
     {
         "name": "Treasurer/Accountant",
+        "code": "treasurer_accountant",
         "description": "Responsible for society financial and accounting activities.",
     },
     {
         "name": "Facility Manager",
+        "code": "facility_manager",
         "description": "Responsible for society facilities and maintenance activities.",
     },
     {
         "name": "Security Supervisor",
+        "code": "security_supervisor",
         "description": "Supervises security operations within a society.",
     },
     {
         "name": "Security Guard",
+        "code": "security_guard",
         "description": "Performs security and access-control activities.",
     },
     {
         "name": "Owner/Resident",
+        "code": "owner_resident",
         "description": "Society resident who owns a property.",
     },
     {
         "name": "Tenant",
+        "code": "tenant",
         "description": "Resident occupying a property as a tenant.",
     },
     {
         "name": "Family Member",
+        "code": "family_member",
         "description": "Family member associated with a society resident.",
     },
     {
         "name": "Vendor",
+        "code": "vendor",
         "description": "External vendor providing services to the society.",
     },
     {
         "name": "Auditor/Read-only",
+        "code": "auditor_read_only",
         "description": "Read-only access for auditing and review purposes.",
     },
 ]

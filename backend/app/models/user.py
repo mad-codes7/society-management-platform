@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship as sqla_relationship
 
@@ -83,6 +83,7 @@ class SocietyMembership(Base, TimestampMixin):
         Index("ix_society_memberships_user_id", "user_id"),
         Index("ix_society_memberships_society_id", "society_id"),
         Index("ix_society_memberships_status", "status"),
+        CheckConstraint("left_at IS NULL OR left_at >= joined_at", name="ck_society_memberships_valid_dates"),
     )
 
     membership_id: Mapped[uuid.UUID] = mapped_column(

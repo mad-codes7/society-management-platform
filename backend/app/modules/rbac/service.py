@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+import re
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -32,7 +33,8 @@ class RbacService:
         return self.repository.list_permissions(db)
 
     def create_role(self, db: Session, data: RoleCreate, actor_user_id: UUID) -> Role:
-        role = Role(name=data.name, description=data.description, is_active=True)
+        code = data.code or re.sub(r"[^a-z0-9]+", "_", data.name.lower()).strip("_")
+        role = Role(name=data.name, code=code, description=data.description, is_active=True)
         try:
             self.repository.create_role(db, role)
             audit_service.record(db, action="role_created", entity_type="role", entity_id=role.role_id,

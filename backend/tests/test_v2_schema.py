@@ -1,7 +1,41 @@
 from app.models.base import Base
+import pytest
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.schema import CreateTable
 from sqlalchemy import text
+from uuid import uuid4
+
+
+def _property_fixture(connection):
+    society_id, building_id, floor_id, unit_id, unit_type_id = [uuid4() for _ in range(5)]
+    person_a, person_b = uuid4(), uuid4()
+    connection.execute(
+        text("INSERT INTO societies (society_id, name, status) VALUES (:id, :name, 'ACTIVE')"),
+        {"id": society_id, "name": f"Review Society {society_id}"},
+    )
+    connection.execute(
+        text("INSERT INTO buildings (building_id, society_id, name, status) VALUES (:id, :society_id, 'Tower', 'ACTIVE')"),
+        {"id": building_id, "society_id": society_id},
+    )
+    connection.execute(
+        text("INSERT INTO floors (floor_id, building_id, floor_number) VALUES (:id, :building_id, 1)"),
+        {"id": floor_id, "building_id": building_id},
+    )
+    connection.execute(
+        text("INSERT INTO unit_types (unit_type_id, society_id, name, is_active) VALUES (:id, :society_id, 'Flat', true)"),
+        {"id": unit_type_id, "society_id": society_id},
+    )
+    connection.execute(
+        text("INSERT INTO units (unit_id, society_id, building_id, floor_id, unit_type_id, unit_number, occupancy_status) VALUES (:id, :society_id, :building_id, :floor_id, :unit_type_id, '101', 'OCCUPIED')"),
+        {"id": unit_id, "society_id": society_id, "building_id": building_id, "floor_id": floor_id, "unit_type_id": unit_type_id},
+    )
+    for person_id, name in ((person_a, "Resident A"), (person_b, "Resident B")):
+        connection.execute(
+            text("INSERT INTO persons (person_id, full_name, status) VALUES (:id, :name, 'ACTIVE')"),
+            {"id": person_id, "name": name},
+        )
+    return society_id, unit_id, unit_type_id, person_a, person_b
 
 
 def test_phase1_v2_tables_and_columns_are_registered() -> None:
@@ -31,6 +65,15 @@ def test_phase1_v2_tables_and_columns_are_registered() -> None:
     assert {"description", "default_area", "area_unit", "is_active"} <= set(Base.metadata.tables["unit_types"].columns.keys())
     assert {"status", "is_primary"} <= set(Base.metadata.tables["residents"].columns.keys())
     assert {"joined_at", "left_at"} <= set(Base.metadata.tables["society_memberships"].columns.keys())
+    assert {"code"} <= set(Base.metadata.tables["roles"].columns.keys())
+    assert {"valid_from", "valid_to", "status"} <= set(Base.metadata.tables["user_roles"].columns.keys())
+    settings = Base.metadata.tables["society_settings"]
+    assert str(settings.c.late_fee_rule.type) == "JSONB"
+    assert str(settings.c.gate_timing.type) == "JSONB"
+    assert str(settings.c.visitor_policy.type) == "JSONB"
+    assert str(settings.c.emergency_config.type) == "JSONB"
+    assert str(settings.c.grace_period_days.type) == "SMALLINT"
+    assert str(settings.c.due_day.type) == "SMALLINT"
     assert {"status"} <= set(Base.metadata.tables["buildings"].columns.keys())
     assert Base.metadata.tables["buildings"].c.status.nullable is False
     assert Base.metadata.tables["residents"].c.resident_type.type.length == 30
@@ -85,13 +128,14 @@ def test_phase1_v2_scoped_keys_are_declared() -> None:
         for constraint in Base.metadata.tables["occupancy_history"].constraints
         if constraint.name
     }
-    assert "ex_occupancy_history_active_unit_dates" in exclusion_names
+    assert "ex_occupancy_history_active_person_unit_dates" in exclusion_names
     occupancy_ddl = str(
         CreateTable(Base.metadata.tables["occupancy_history"]).compile(
             dialect=postgresql.dialect()
         )
     )
     assert "daterange(move_in_date, coalesce(move_out_date" in occupancy_ddl
+    assert "person_id" in occupancy_ddl
     assert "daterange('move_in_date'" not in occupancy_ddl
     assert "coalesce('move_out_date'" not in occupancy_ddl
 
@@ -142,7 +186,7 @@ def test_postgresql_btree_gist_supports_occupancy_exclusion(engine) -> None:
                 "JOIN pg_class r ON r.oid = pg_constraint.conrelid "
                 "JOIN pg_namespace n ON n.oid = r.relnamespace "
                 "WHERE n.nspname = :schema_name AND r.relname = 'occupancy_history' "
-                "AND conname = 'ex_occupancy_history_active_unit_dates'"
+                "AND conname = 'ex_occupancy_history_active_person_unit_dates'"
                 ")"
             ),
             {"schema_name": current_schema},
@@ -151,3 +195,72 @@ def test_postgresql_btree_gist_supports_occupancy_exclusion(engine) -> None:
     assert resolved_schema == current_schema
     assert extension_exists is True
     assert exclusion_exists is True
+
+
+def test_occupancy_allows_household_people_and_rejects_same_person_overlap(engine) -> None:
+    with engine.begin() as connection:
+        society_id, unit_id, _, person_a, person_b = _property_fixture(connection)
+        for person_id, start in ((person_a, "2026-01-01"), (person_b, "2026-02-01")):
+            connection.execute(
+                text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', :start, 'ACTIVE')"),
+                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_id, "start": start},
+            )
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, move_out_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', '2026-03-01', '2026-04-01', 'ACTIVE')"),
+                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+            )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE occupancy_history SET move_out_date = '2026-06-01' WHERE society_id = :society_id AND person_id = :person_id"),
+            {"society_id": society_id, "person_id": person_a},
+        )
+        connection.execute(
+            text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', '2026-06-02', 'ACTIVE')"),
+            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+        )
+
+
+def test_deleting_unit_type_nulls_only_type_id(engine) -> None:
+    with engine.begin() as connection:
+        _, unit_id, unit_type_id, _, _ = _property_fixture(connection)
+        connection.execute(text("DELETE FROM unit_types WHERE unit_type_id = :id"), {"id": unit_type_id})
+        row = connection.execute(text("SELECT society_id, unit_type_id FROM units WHERE unit_id = :id"), {"id": unit_id}).mappings().one()
+        assert row["society_id"] is not None
+        assert row["unit_type_id"] is None
+
+
+def test_active_lease_overlap_and_ownership_share_rules_are_database_enforced(engine) -> None:
+    with engine.begin() as connection:
+        society_id, unit_id, _, person_a, person_b = _property_fixture(connection)
+        connection.execute(
+            text("INSERT INTO leases (lease_id, society_id, unit_id, tenant_person_id, lease_start, lease_end, status) VALUES (:id, :society_id, :unit_id, :person_id, '2026-01-01', '2026-06-01', 'ACTIVE')"),
+            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+        )
+        connection.execute(
+            text("INSERT INTO ownerships (ownership_id, society_id, unit_id, person_id, share_percentage, start_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 60, '2026-01-01', 'ACTIVE')"),
+            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+        )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO leases (lease_id, society_id, unit_id, tenant_person_id, lease_start, lease_end, status) VALUES (:id, :society_id, :unit_id, :person_id, '2026-05-01', '2026-07-01', 'ACTIVE')"),
+            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_b},
+        )
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO leases (lease_id, society_id, unit_id, tenant_person_id, lease_start, lease_end, status) VALUES (:id, :society_id, :unit_id, :person_id, '2026-05-01', '2026-07-01', 'ACTIVE')"),
+                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+            )
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO ownerships (ownership_id, society_id, unit_id, person_id, share_percentage, start_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 101, '2026-01-01', 'ACTIVE')"),
+                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_b},
+            )

@@ -1,10 +1,13 @@
 ﻿from __future__ import annotations
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 TESTS_ROOT = Path(__file__).resolve().parent
@@ -73,6 +76,7 @@ def create_rbac_role(
 ) -> Role:
     role = Role(
         name=name,
+        code=f"test_{name.lower().replace(' ', '_')}",
         description=f"Test role: {name}",
         is_active=True,
     )
@@ -170,6 +174,55 @@ def test_user_without_permission_is_denied(
     except HTTPException as exc:
         assert exc.status_code == 403
         assert exc.detail == "Insufficient permissions."
+
+
+def test_expired_role_assignment_is_not_authorized(
+    db_session: Session,
+    tenant_data,
+) -> None:
+    user = tenant_data["regular_user"]
+    society = tenant_data["society_a"]
+    permission = create_rbac_permission(db_session, "test:expired")
+    role = create_rbac_role(db_session, "Expired Reader")
+    grant_permission(db_session, role, permission)
+    membership = db_session.query(SocietyMembership).filter_by(
+        user_id=user.user_id, society_id=society.society_id
+    ).one()
+    db_session.add(UserRole(
+        membership_id=membership.membership_id,
+        role_id=role.role_id,
+        valid_from=datetime.now(timezone.utc) - timedelta(days=2),
+        valid_to=datetime.now(timezone.utc) - timedelta(days=1),
+    ))
+    db_session.flush()
+
+    context = resolve_tenant_context(db_session, user, society.society_id)
+    with pytest.raises(HTTPException, match="Insufficient permissions"):
+        require_permission("test:expired")(
+            society_id=society.society_id,
+            tenant_context=context,
+            db=db_session,
+        )
+
+
+def test_role_assignment_rejects_invalid_validity_range(
+    db_session: Session,
+    tenant_data,
+) -> None:
+    user = tenant_data["regular_user"]
+    society = tenant_data["society_a"]
+    role = create_rbac_role(db_session, "Invalid Dates Reader")
+    membership = db_session.query(SocietyMembership).filter_by(
+        user_id=user.user_id, society_id=society.society_id
+    ).one()
+    db_session.add(UserRole(
+        membership_id=membership.membership_id,
+        role_id=role.role_id,
+        valid_from=datetime.now(timezone.utc),
+        valid_to=datetime.now(timezone.utc) - timedelta(minutes=1),
+    ))
+    with pytest.raises(IntegrityError):
+        db_session.flush()
 
 
 def test_inactive_membership_is_denied(

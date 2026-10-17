@@ -157,7 +157,7 @@ class Unit(Base, TimestampMixin):
         UniqueConstraint("society_id", "unit_id", name="uq_units_society_id"),
         ForeignKeyConstraint(["society_id", "building_id"], ["buildings.society_id", "buildings.building_id"], ondelete="CASCADE"),
         ForeignKeyConstraint(["building_id", "floor_id"], ["floors.building_id", "floors.floor_id"], ondelete="CASCADE"),
-        ForeignKeyConstraint(["society_id", "unit_type_id"], ["unit_types.society_id", "unit_types.unit_type_id"], ondelete="SET NULL"),
+        ForeignKeyConstraint(["society_id", "unit_type_id"], ["unit_types.society_id", "unit_types.unit_type_id"], ondelete="SET NULL (unit_type_id)"),
     )
 
     unit_id: Mapped[uuid.UUID] = mapped_column(

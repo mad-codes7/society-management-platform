@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -43,6 +43,9 @@ def require_permission(permission_code: str):
                 RolePermission.role_id == Role.role_id,
                 Role.is_active.is_(True),
                 Permission.code == permission_code,
+                UserRole.status == "ACTIVE",
+                UserRole.valid_from <= func.now(),
+                (UserRole.valid_to.is_(None) | (UserRole.valid_to > func.now())),
             )
         )
 
