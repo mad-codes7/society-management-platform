@@ -38,7 +38,6 @@ class Lease(Base, TimestampMixin):
         ExcludeConstraint(
             ("society_id", "="),
             ("unit_id", "="),
-            ("tenant_person_id", "="),
             (
                 func.daterange(
                     literal_column("lease_start", type_=Date()),
@@ -48,7 +47,7 @@ class Lease(Base, TimestampMixin):
                 "&&",
             ),
             where=and_(text("status = 'ACTIVE'")),
-            name="ex_leases_active_tenant_unit_dates",
+            name="ex_leases_active_unit_dates",
             using="gist",
         ),
         CheckConstraint("lease_end IS NULL OR lease_end > lease_start", name="ck_leases_valid_dates"),

@@ -61,6 +61,23 @@ def test_alembic_head_upgrades_in_isolated_schema(engine: Engine) -> None:
         with engine.connect() as connection:
             connection.execute(text(f'SET search_path TO "{schema_name}"'))
             table_names = set(inspect(connection).get_table_names())
+            lease_constraint = connection.execute(
+                text(
+                    """
+                    SELECT pg_get_constraintdef(c.oid)
+                    FROM pg_constraint c
+                    JOIN pg_class t ON t.oid = c.conrelid
+                    JOIN pg_namespace n ON n.oid = t.relnamespace
+                    WHERE n.nspname = :schema_name
+                    AND t.relname = 'leases'
+                    AND c.conname = 'ex_leases_active_unit_dates'
+                    """
+                ),
+                {"schema_name": schema_name},
+            ).scalar_one()
+
+            assert "unit_id WITH =" in lease_constraint
+            assert "tenant_person_id WITH =" not in lease_constraint
             assert {
                 "alembic_version",
                 "persons",

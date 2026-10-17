@@ -148,20 +148,18 @@ def upgrade() -> None:
           ON a.lease_id < b.lease_id
          AND a.society_id = b.society_id
          AND a.unit_id = b.unit_id
-         AND a.tenant_person_id = b.tenant_person_id
          AND a.status = 'ACTIVE' AND b.status = 'ACTIVE'
          AND daterange(a.lease_start, COALESCE(a.lease_end, 'infinity'::date), '[]')
              && daterange(b.lease_start, COALESCE(b.lease_end, 'infinity'::date), '[]')
         """,
-        "overlapping active leases exist for the same tenant and unit",
+        "overlapping active leases exist for the same unit",
     )
     op.execute(
         """
-        ALTER TABLE leases ADD CONSTRAINT ex_leases_active_tenant_unit_dates
+        ALTER TABLE leases ADD CONSTRAINT ex_leases_active_unit_dates
         EXCLUDE USING gist (
             society_id WITH =,
             unit_id WITH =,
-            tenant_person_id WITH =,
             daterange(lease_start, COALESCE(lease_end, 'infinity'::date), '[]') WITH &&
         ) WHERE (status = 'ACTIVE')
         """
@@ -186,7 +184,7 @@ def downgrade() -> None:
     op.drop_constraint("ck_ownerships_valid_dates", "ownerships", type_="check")
     op.drop_constraint("ck_ownerships_share_percentage", "ownerships", type_="check")
     op.drop_constraint("ck_leases_valid_dates", "leases", type_="check")
-    op.execute("ALTER TABLE leases DROP CONSTRAINT ex_leases_active_tenant_unit_dates")
+    op.execute("ALTER TABLE leases DROP CONSTRAINT ex_leases_active_unit_dates")
     op.drop_constraint("ck_occupancy_history_valid_dates", "occupancy_history", type_="check")
     op.execute("ALTER TABLE occupancy_history DROP CONSTRAINT ex_occupancy_history_active_person_unit_dates")
     op.execute(

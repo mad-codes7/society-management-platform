@@ -234,33 +234,94 @@ def test_deleting_unit_type_nulls_only_type_id(engine) -> None:
 
 
 def test_active_lease_overlap_and_ownership_share_rules_are_database_enforced(engine) -> None:
+    # Set up one flat, two people, an existing lease, and 60% ownership.
     with engine.begin() as connection:
         society_id, unit_id, _, person_a, person_b = _property_fixture(connection)
+
         connection.execute(
-            text("INSERT INTO leases (lease_id, society_id, unit_id, tenant_person_id, lease_start, lease_end, status) VALUES (:id, :society_id, :unit_id, :person_id, '2026-01-01', '2026-06-01', 'ACTIVE')"),
-            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
-        )
-        connection.execute(
-            text("INSERT INTO ownerships (ownership_id, society_id, unit_id, person_id, share_percentage, start_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 60, '2026-01-01', 'ACTIVE')"),
-            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+            text(
+                "INSERT INTO leases "
+                "(lease_id, society_id, unit_id, tenant_person_id, "
+                "lease_start, lease_end, status) "
+                "VALUES (:id, :society_id, :unit_id, :person_id, "
+                "'2026-01-01', '2026-06-01', 'ACTIVE')"
+            ),
+            {
+                "id": uuid4(),
+                "society_id": society_id,
+                "unit_id": unit_id,
+                "person_id": person_a,
+            },
         )
 
-    with engine.begin() as connection:
         connection.execute(
-            text("INSERT INTO leases (lease_id, society_id, unit_id, tenant_person_id, lease_start, lease_end, status) VALUES (:id, :society_id, :unit_id, :person_id, '2026-05-01', '2026-07-01', 'ACTIVE')"),
-            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_b},
+            text(
+                "INSERT INTO ownerships "
+                "(ownership_id, society_id, unit_id, person_id, "
+                "share_percentage, start_date, status) "
+                "VALUES (:id, :society_id, :unit_id, :person_id, "
+                "60, '2026-01-01', 'ACTIVE')"
+            ),
+            {
+                "id": uuid4(),
+                "society_id": society_id,
+                "unit_id": unit_id,
+                "person_id": person_a,
+            },
         )
 
-    with pytest.raises(IntegrityError):
+    # Overlapping active lease for a different tenant must be rejected.
+    with pytest.raises(IntegrityError, match="ex_leases_active_unit_dates"):
         with engine.begin() as connection:
             connection.execute(
-                text("INSERT INTO leases (lease_id, society_id, unit_id, tenant_person_id, lease_start, lease_end, status) VALUES (:id, :society_id, :unit_id, :person_id, '2026-05-01', '2026-07-01', 'ACTIVE')"),
-                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_a},
+                text(
+                    "INSERT INTO leases "
+                    "(lease_id, society_id, unit_id, tenant_person_id, "
+                    "lease_start, lease_end, status) "
+                    "VALUES (:id, :society_id, :unit_id, :person_id, "
+                    "'2026-05-01', '2026-07-01', 'ACTIVE')"
+                ),
+                {
+                    "id": uuid4(),
+                    "society_id": society_id,
+                    "unit_id": unit_id,
+                    "person_id": person_b,
+                },
             )
 
+    # A new tenant may lease the flat after the previous lease ends.
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO leases "
+                "(lease_id, society_id, unit_id, tenant_person_id, "
+                "lease_start, lease_end, status) "
+                "VALUES (:id, :society_id, :unit_id, :person_id, "
+                "'2026-06-02', '2026-12-31', 'ACTIVE')"
+            ),
+            {
+                "id": uuid4(),
+                "society_id": society_id,
+                "unit_id": unit_id,
+                "person_id": person_b,
+            },
+        )
+
+    # An individual ownership share above 100% must be rejected.
     with pytest.raises(IntegrityError):
         with engine.begin() as connection:
             connection.execute(
-                text("INSERT INTO ownerships (ownership_id, society_id, unit_id, person_id, share_percentage, start_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 101, '2026-01-01', 'ACTIVE')"),
-                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_b},
+                text(
+                    "INSERT INTO ownerships "
+                    "(ownership_id, society_id, unit_id, person_id, "
+                    "share_percentage, start_date, status) "
+                    "VALUES (:id, :society_id, :unit_id, :person_id, "
+                    "101, '2026-01-01', 'ACTIVE')"
+                ),
+                {
+                    "id": uuid4(),
+                    "society_id": society_id,
+                    "unit_id": unit_id,
+                    "person_id": person_b,
+                },
             )
