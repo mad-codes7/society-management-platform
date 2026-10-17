@@ -176,7 +176,7 @@ def test_audit_read_is_authorized_paginated_and_tenant_scoped(
     society_a = tenant_data["society_a"]
     society_b = tenant_data["society_b"]
     permission = Permission(code="audit:read", module="audit")
-    role = Role(name=f"Audit Reader {uuid4().hex}", is_active=True)
+    role = Role(name=f"Audit Reader {uuid4().hex}", code=f"audit_reader_{uuid4().hex}", is_active=True)
     db_session.add_all([permission, role])
     db_session.flush()
     db_session.add_all([

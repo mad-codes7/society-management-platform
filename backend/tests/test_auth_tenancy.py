@@ -230,6 +230,7 @@ def test_member_can_access_society_a_protected_data(
     )
     role = Role(
         name=f"Test Society Reader {uuid4().hex}",
+        code=f"test_society_reader_{uuid4().hex}",
         description="Test role with society read access.",
         is_active=True,
     )
@@ -559,6 +560,7 @@ def test_assigned_admin_can_access_only_the_assigned_society(
 
     role = Role(
         name=f"Test Society Admin {uuid4().hex}",
+        code=f"test_society_admin_{uuid4().hex}",
         description="Test Society Admin role.",
         is_active=True,
     )

@@ -3,7 +3,8 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, SmallInteger, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship as sqla_relationship
 
@@ -103,29 +104,34 @@ class SocietySetting(Base, TimestampMixin):
     )
 
     late_fee_rule: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONB,
         nullable=True,
     )
 
     grace_period_days: Mapped[Optional[int]] = mapped_column(
-        Integer,
+        SmallInteger,
         nullable=True,
         default=7,
     )
 
     due_day: Mapped[Optional[int]] = mapped_column(
-        Integer,
+        SmallInteger,
         nullable=True,
         default=10,
     )
 
     gate_timing: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONB,
         nullable=True,
     )
 
     visitor_policy: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONB,
+        nullable=True,
+    )
+
+    emergency_config: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
         nullable=True,
     )
 

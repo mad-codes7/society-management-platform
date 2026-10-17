@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class RoleCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    code: Optional[str] = Field(default=None, min_length=1, max_length=80)
     description: Optional[str] = Field(default=None, max_length=255)
 
 
@@ -22,6 +23,7 @@ class RoleResponse(BaseModel):
 
     role_id: UUID
     name: str
+    code: str
     description: Optional[str]
     is_active: bool
 

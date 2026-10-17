@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, ForeignKeyConstraint, Numeric, String, UniqueConstraint, and_, func, literal_column, text
+from sqlalchemy import CheckConstraint, Date, ForeignKey, ForeignKeyConstraint, Numeric, String, UniqueConstraint, and_, func, literal_column, text
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -16,6 +16,8 @@ class Ownership(Base, TimestampMixin):
     __tablename__ = "ownerships"
     __table_args__ = (
         ForeignKeyConstraint(["society_id", "unit_id"], ["units.society_id", "units.unit_id"], ondelete="RESTRICT"),
+        CheckConstraint("share_percentage IS NULL OR share_percentage BETWEEN 0 AND 100", name="ck_ownerships_share_percentage"),
+        CheckConstraint("end_date IS NULL OR end_date > start_date", name="ck_ownerships_valid_dates"),
     )
 
     ownership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -33,6 +35,22 @@ class Lease(Base, TimestampMixin):
     __tablename__ = "leases"
     __table_args__ = (
         ForeignKeyConstraint(["society_id", "unit_id"], ["units.society_id", "units.unit_id"], ondelete="RESTRICT"),
+        ExcludeConstraint(
+            ("society_id", "="),
+            ("unit_id", "="),
+            (
+                func.daterange(
+                    literal_column("lease_start", type_=Date()),
+                    func.coalesce(literal_column("lease_end", type_=Date()), text("'infinity'::date")),
+                    "[]",
+                ),
+                "&&",
+            ),
+            where=and_(text("status = 'ACTIVE'")),
+            name="ex_leases_active_unit_dates",
+            using="gist",
+        ),
+        CheckConstraint("lease_end IS NULL OR lease_end > lease_start", name="ck_leases_valid_dates"),
     )
 
     lease_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -50,7 +68,9 @@ class OccupancyHistory(Base, TimestampMixin):
     __table_args__ = (
         ForeignKeyConstraint(["society_id", "unit_id"], ["units.society_id", "units.unit_id"], ondelete="RESTRICT"),
         ExcludeConstraint(
+            ("society_id", "="),
             ("unit_id", "="),
+            ("person_id", "="),
             (
                 func.daterange(
                     literal_column("move_in_date", type_=Date()),
@@ -63,9 +83,10 @@ class OccupancyHistory(Base, TimestampMixin):
                 "&&",
             ),
             where=and_(text("status = 'ACTIVE'")),
-            name="ex_occupancy_history_active_unit_dates",
+            name="ex_occupancy_history_active_person_unit_dates",
             using="gist",
         ),
+        CheckConstraint("move_out_date IS NULL OR move_out_date > move_in_date", name="ck_occupancy_history_valid_dates"),
     )
 
     occupancy_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

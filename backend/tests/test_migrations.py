@@ -61,6 +61,23 @@ def test_alembic_head_upgrades_in_isolated_schema(engine: Engine) -> None:
         with engine.connect() as connection:
             connection.execute(text(f'SET search_path TO "{schema_name}"'))
             table_names = set(inspect(connection).get_table_names())
+            lease_constraint = connection.execute(
+                text(
+                    """
+                    SELECT pg_get_constraintdef(c.oid)
+                    FROM pg_constraint c
+                    JOIN pg_class t ON t.oid = c.conrelid
+                    JOIN pg_namespace n ON n.oid = t.relnamespace
+                    WHERE n.nspname = :schema_name
+                    AND t.relname = 'leases'
+                    AND c.conname = 'ex_leases_active_unit_dates'
+                    """
+                ),
+                {"schema_name": schema_name},
+            ).scalar_one()
+
+            assert "unit_id WITH =" in lease_constraint
+            assert "tenant_person_id WITH =" not in lease_constraint
             assert {
                 "alembic_version",
                 "persons",
@@ -173,4 +190,60 @@ def test_v2_backfills_unlinked_users_without_changing_authentication_data(engine
             connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
             
         # Kill pooled connections that were pointing to the dropped schema
+        engine.dispose()
+
+
+def test_review_corrections_preserve_legacy_role_and_settings_data(engine: Engine) -> None:
+    schema_name = f"migration_review_{uuid4().hex}"
+    society_id = uuid4()
+    role_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+
+    previous_pgoptions = os.environ.get("PGOPTIONS")
+    os.environ["PGOPTIONS"] = f"-csearch_path={schema_name}"
+    try:
+        alembic_config = Config(str(BACKEND_ROOT / "alembic.ini"))
+        command.upgrade(alembic_config, "c9d0e1f2a3b4")
+        with engine.begin() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            connection.execute(
+                text("INSERT INTO societies (society_id, name, status) VALUES (:id, 'Legacy Review Society', 'ACTIVE')"),
+                {"id": society_id},
+            )
+            connection.execute(
+                text("INSERT INTO roles (role_id, name, description, is_active) VALUES (:id, 'Legacy Treasurer', 'Preserve me', true)"),
+                {"id": role_id},
+            )
+            connection.execute(
+                text("INSERT INTO society_settings (setting_id, society_id, late_fee_rule, grace_period_days, due_day) VALUES (:id, :society_id, '{\"kind\": \"fixed\", \"amount\": 25}', 7, 10)"),
+                {"id": uuid4(), "society_id": society_id},
+            )
+
+        command.upgrade(alembic_config, "head")
+
+        with engine.connect() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            role = connection.execute(
+                text("SELECT code, description FROM roles WHERE role_id = :id"), {"id": role_id}
+            ).mappings().one()
+            settings = connection.execute(
+                text("SELECT late_fee_rule, grace_period_days, due_day FROM society_settings WHERE society_id = :id"),
+                {"id": society_id},
+            ).mappings().one()
+
+        assert role["code"] == "legacy_treasurer"
+        assert role["description"] == "Preserve me"
+        assert settings["late_fee_rule"] == {"kind": "fixed", "amount": 25}
+        assert settings["grace_period_days"] == 7
+        assert settings["due_day"] == 10
+    finally:
+        if previous_pgoptions is None:
+            os.environ.pop("PGOPTIONS", None)
+        else:
+            os.environ["PGOPTIONS"] = previous_pgoptions
+
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+
         engine.dispose()

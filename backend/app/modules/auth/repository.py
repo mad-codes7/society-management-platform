@@ -97,6 +97,7 @@ class AuthRepository:
             SocietyMembership.user_id == user_id,
             SocietyMembership.society_id == society_id,
             SocietyMembership.status == "ACTIVE",
+            (SocietyMembership.left_at.is_(None) | (SocietyMembership.left_at > func.now())),
         )
         return db.scalar(statement)
 
