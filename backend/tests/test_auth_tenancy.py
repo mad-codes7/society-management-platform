@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
@@ -125,6 +126,7 @@ def tenant_data(db_session: Session) -> dict[str, object]:
         "super_admin": super_admin,
         "building_a": building_a,
         "building_b": building_b,
+        "unit_a": unit_a,
         "unit_b": unit_b,
         "resident_b": resident_b,
     }
@@ -213,6 +215,124 @@ def test_me_requires_token_and_accepts_valid_token(
     assert authenticated.status_code == 200
     assert authenticated.json()["user_id"] == str(user.user_id)
     assert "password_hash" not in authenticated.json()
+
+
+def test_me_excludes_expired_membership(
+    client: TestClient,
+    db_session: Session,
+    tenant_data: dict[str, object],
+) -> None:
+    user = tenant_data["regular_user"]
+    membership = db_session.query(SocietyMembership).filter_by(user_id=user.user_id).one()
+    now = datetime.now(timezone.utc)
+    membership.joined_at = now - timedelta(days=2)
+    membership.left_at = now - timedelta(days=1)
+    db_session.flush()
+
+    response = client.get("/api/v1/auth/me", headers=bearer_headers(user))
+
+    assert response.status_code == 200
+    assert response.json()["memberships"] == []
+
+
+def test_resident_onboarding_and_contact_api_flow(
+    client: TestClient,
+    tenant_data: dict[str, object],
+) -> None:
+    user = tenant_data["regular_user"]
+    society = tenant_data["society_a"]
+    unit = tenant_data["unit_a"]
+    headers = bearer_headers(user)
+
+    created = client.post(
+        "/api/v1/residents",
+        headers=headers,
+        json={
+            "society_id": str(society.society_id),
+            "unit_id": str(unit.unit_id),
+            "resident_type": "TENANT",
+            "move_in_date": "2026-10-01",
+            "person": {
+                "first_name": "UAT",
+                "last_name": "Resident",
+                "email": f"uat-{uuid4().hex}@example.com",
+            },
+        },
+    )
+    assert created.status_code == 201
+    resident = created.json()
+    assert resident["society_id"] == str(society.society_id)
+    assert resident["unit_id"] == str(unit.unit_id)
+    assert resident["person"]["full_name"] == "UAT Resident"
+
+    detail = client.get(f"/api/v1/residents/{resident['resident_id']}", headers=headers)
+    listing = client.get(
+        f"/api/v1/residents/societies/{society.society_id}?unit_id={unit.unit_id}",
+        headers=headers,
+    )
+    assert detail.status_code == 200
+    assert detail.json()["resident_id"] == resident["resident_id"]
+    assert listing.status_code == 200
+    assert resident["resident_id"] in [item["resident_id"] for item in listing.json()]
+
+    family = client.post(
+        "/api/v1/residents/family-members",
+        headers=headers,
+        json={
+            "resident_id": resident["resident_id"],
+            "relationship": "SPOUSE",
+            "emergency_contact": True,
+            "app_access_enabled": True,
+        },
+    )
+    assert family.status_code == 201
+    family_listing = client.get(
+        f"/api/v1/residents/{resident['resident_id']}/family-members",
+        headers=headers,
+    )
+    assert family_listing.status_code == 200
+    assert family.json()["family_member_id"] in [item["family_member_id"] for item in family_listing.json()]
+
+    contact = client.post(
+        "/api/v1/residents/emergency-contacts",
+        headers=headers,
+        json={
+            "resident_id": resident["resident_id"],
+            "name": "UAT Emergency Contact",
+            "relationship": "FRIEND",
+            "mobile": "9876543210",
+            "priority": 1,
+        },
+    )
+    assert contact.status_code == 201
+    contact_listing = client.get(
+        f"/api/v1/residents/{resident['resident_id']}/emergency-contacts",
+        headers=headers,
+    )
+    assert contact_listing.status_code == 200
+    assert contact.json()["emergency_contact_id"] in [
+        item["emergency_contact_id"] for item in contact_listing.json()
+    ]
+
+
+def test_resident_contact_api_rejects_cross_society_resident(
+    client: TestClient,
+    tenant_data: dict[str, object],
+) -> None:
+    user = tenant_data["regular_user"]
+    resident = tenant_data["resident_b"]
+
+    response = client.post(
+        "/api/v1/residents/emergency-contacts",
+        headers=bearer_headers(user),
+        json={
+            "resident_id": str(resident.resident_id),
+            "name": "Cross-Society Contact",
+            "mobile": "9876543210",
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_member_can_access_society_a_protected_data(

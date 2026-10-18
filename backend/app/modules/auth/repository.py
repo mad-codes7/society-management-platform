@@ -82,6 +82,7 @@ class AuthRepository:
             .where(
                 SocietyMembership.user_id == user_id,
                 SocietyMembership.status == "ACTIVE",
+                (SocietyMembership.left_at.is_(None) | (SocietyMembership.left_at > func.now())),
             )
             .order_by(SocietyMembership.created_at)
         )
