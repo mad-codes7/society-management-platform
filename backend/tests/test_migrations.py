@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import importlib.util
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from uuid import uuid4
 
 from alembic import command
@@ -311,16 +313,23 @@ def test_ownership_aggregate_validation_enforces_periods_and_updates(engine: Eng
             for person_id in person_ids:
                 connection.execute(text("INSERT INTO persons (person_id,full_name) VALUES (:id,'Owner')"), {"id": person_id})
             def ownership(unit, person, share, start, end=None, status="ACTIVE"):
-                connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,end_date,status) VALUES (:id,:society,:unit,:person,:share,:start,:end,:status)"), {"id": uuid4(), "society": society_id, "unit": unit, "person": person, "share": share, "start": start, "end": end, "status": status})
+                ownership_id = uuid4()
+                connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,end_date,status) VALUES (:id,:society,:unit,:person,:share,:start,:end,:status)"), {"id": ownership_id, "society": society_id, "unit": unit, "person": person, "share": share, "start": start, "end": end, "status": status})
+                return ownership_id
 
             ownership(unit_id, person_ids[0], 40, "2026-01-01", "2026-01-31")
             ownership(unit_id, person_ids[1], 60, "2026-01-01", "2026-01-31")
-            ownership(unit_id, person_ids[2], 100, "2026-02-01", "2026-02-28")
+            february_ownership_id = ownership(unit_id, person_ids[2], 100, "2026-02-01", "2026-02-28")
             ownership(unit2_id, person_ids[0], 60, "2026-01-01")
 
         with pytest.raises(IntegrityError, match="exceed 100%"):
             with engine.begin() as connection:
                 connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,status) VALUES (:id,:society,:unit,:person,41,'2026-01-15','ACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit_id, "person": person_ids[2]})
+        # Jan 31 remains covered by the 40% and 60% rows; Feb 1 is the first
+        # day after their inclusive end and starts a valid historical period.
+        with pytest.raises(IntegrityError, match="exceed 100%"):
+            with engine.begin() as connection:
+                connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,end_date,status) VALUES (:id,:society,:unit,:person,1,'2026-01-31','2026-01-31','ACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit_id, "person": person_ids[2]})
 
         with engine.begin() as connection:
             connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,status) VALUES (:id,:society,:unit,:person,40,'2026-01-01','INACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit2_id, "person": person_ids[1]})
@@ -330,6 +339,33 @@ def test_ownership_aggregate_validation_enforces_periods_and_updates(engine: Eng
         with pytest.raises(IntegrityError, match="exceed 100%"):
             with engine.begin() as connection:
                 connection.execute(text("UPDATE ownerships SET unit_id=:new_unit WHERE unit_id=:unit AND person_id=:person"), {"new_unit": unit_id, "unit": unit2_id, "person": person_ids[0]})
+
+        # Removing a valid ownership row is allowed and is checked by the same
+        # database trigger. The freed historical period can then be reassigned.
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM ownerships WHERE ownership_id=:id"), {"id": february_ownership_id})
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,end_date,status) VALUES (:id,:society,:unit,:person,100,'2026-02-01','2026-02-28','ACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit_id, "person": person_ids[0]})
+
+        # Two concurrent inserts would total 120% after the existing 0% March
+        # balance. The advisory lock and deferred check must allow only one.
+        barrier = Barrier(2)
+
+        def insert_concurrent_share(person_id):
+            try:
+                with engine.begin() as connection:
+                    barrier.wait(timeout=10)
+                    connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,status) VALUES (:id,:society,:unit,:person,60,'2026-03-01','ACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit_id, "person": person_id})
+                return True
+            except IntegrityError:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(insert_concurrent_share, person_ids[1:3]))
+        assert sorted(outcomes) == [False, True]
+        with engine.connect() as connection:
+            active_march_shares = connection.execute(text("SELECT sum(share_percentage) FROM ownerships WHERE unit_id=:unit AND status='ACTIVE' AND start_date='2026-03-01'"), {"unit": unit_id}).scalar_one()
+        assert active_march_shares == 60
     finally:
         if previous_pgoptions is None:
             os.environ.pop("PGOPTIONS", None)

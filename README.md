@@ -96,6 +96,8 @@ The PostgreSQL test suite includes migration upgrade regressions and
 database integrity checks. See `PROGRESS.md` for the latest verified local
 test and hosted CI results; no Phase 1 sign-off is implied by these checks.
 
+The latest verified integration run is [GitHub Actions run #27](https://github.com/mad-codes7/society-management-platform/actions/runs/39624909344): clean Alembic upgrade and **52 passed, 1 warning**. This result is for integration commit `d043db8` after PR #8; local audit-branch changes are not included in that run.
+
 ## Architecture
 
 The backend follows an API-first modular monolith architecture:

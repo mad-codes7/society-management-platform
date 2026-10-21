@@ -52,40 +52,28 @@ This document tracks all engineering progress, domain models, schema implementat
 
 ---
 
-## Integrated Phase 1 Status
+## Latest Verified Phase 1 Validation
 
-The society/property/resident schema, API integration, migrations, and
-PostgreSQL-backed tests are present on the integrated backend branch. This
-progress file is retained as a historical activity log; its dated validation
-section below reflects an earlier branch and must not be read as evidence for
-the current correction branch. Current verified results are recorded after
-validation of this branch.
+**Integration branch:** `feat/backend-db-foundation`, merge commit `d043db8`
+(PR #8 merged 2026-10-21).
 
----
+- GitHub Actions [Backend tests run #27](https://github.com/mad-codes7/society-management-platform/actions/runs/39624909344): **success**.
+- The workflow installed `backend/requirements.txt`, performed a clean `alembic upgrade head` through `e7f8a9b0c1d2`, then ran the complete PostgreSQL suite: **52 passed, 1 warning in 9.82s** (from the job log).
+- The suite includes the pre-V2 overlapping-household migration regression, aggregate ownership share checks, overlapping leases, unit-type deletion, and API/tenancy/RBAC coverage.
+- The hosted dependency installation succeeded. The workflow does not run `pip check`.
 
-## Phase 1 API Validation & UAT Review (2026-10-18)
+## Local Audit Branch
 
-**Reviewed branch:** `feat/backend-db-foundation` at `90c184f` (GitHub review-correction merge).
+The follow-up audit is on local branch `fix/phase1-final-review`, based on
+`d043db8`. Its additional concurrency and inclusive-date regression tests are
+not part of run #27. Local PostgreSQL is unavailable because `TEST_DATABASE_URL`
+is unset, Docker Desktop is unavailable, and ports 5432/5433 do not respond.
+The backend virtual environment passes `pip check` with no broken requirements.
+`compileall`, `git diff --check`, and Alembic history parsing pass; the latter
+reports `f1a2b3c4d5e6` as the single head. `pytest` stops at collection because
+the required dedicated `TEST_DATABASE_URL` is unset; no local PostgreSQL tests
+ran. The audit-branch tests and new forward migration remain unverified on
+PostgreSQL until a database is available or a hosted run is authorized.
 
-- [x] Local branch fast-forwarded to the current GitHub review merge.
-- [x] Python compile check completed for `backend/app` and `backend/tests`.
-- [x] FastAPI application import and OpenAPI generation completed; 33 API paths are registered.
-- [x] `git diff --check` completed without whitespace errors.
-- [x] `/api/v1/auth/me` now omits memberships whose `left_at` has passed; regression test added.
-- [x] Clean PostgreSQL migration completed on the dedicated `society_management_codex_uat` database; Alembic reports `d4e5f6a7b8c9 (head)`.
-- [x] The earlier validation run included PostgreSQL-backed API, tenancy/RBAC, migration, and schema-constraint coverage; its count is omitted because it predates this correction branch.
-- [x] Added API UAT coverage for resident onboarding, detail/list retrieval, family and emergency-contact create/list flows, and cross-society denial.
-- [x] Added PostgreSQL lifecycle coverage for linked and external emergency contacts, vehicle/person/unit deletion behavior, duplicate vehicle registration rejection, and cross-society vehicle/unit FK rejection.
-- [x] Earlier validation ran FastAPI `TestClient`/HTTPX API tests. Its dependency and hosted CI results do not apply to this correction branch.
-- [x] `compileall` and `git diff --check` passed after the final changes.
-- The pre-existing `society_management_test` database contained a `societies` table and was left untouched. Validation used the fresh dedicated database above.
-
-### Current correction branch validation
-
-On 2026-10-21, Python compilation and `git diff --check` passed. The
-PostgreSQL suite and clean Alembic upgrade could not run locally: no separate
-`TEST_DATABASE_URL` is configured, Docker Desktop is unavailable, and neither
-local PostgreSQL port 5432 nor 5433 responds. `pip check` reported existing
-environment conflicts in Streamlit/packaging/Pillow and Torch/TorchAudio/
-TorchVision. Hosted GitHub Actions status will be added only after checking
-the workflow run for this branch.
+These automated results do not constitute stakeholder acceptance or Phase 1
+sign-off.

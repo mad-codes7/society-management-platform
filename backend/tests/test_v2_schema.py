@@ -200,11 +200,36 @@ def test_postgresql_btree_gist_supports_occupancy_exclusion(engine) -> None:
 def test_occupancy_allows_household_people_and_rejects_same_person_overlap(engine) -> None:
     with engine.begin() as connection:
         society_id, unit_id, _, person_a, person_b = _property_fixture(connection)
+        person_c = uuid4()
+        connection.execute(
+            text("INSERT INTO persons (person_id, full_name, status) VALUES (:id, 'Single day resident', 'ACTIVE')"),
+            {"id": person_c},
+        )
         for person_id, start in ((person_a, "2026-01-01"), (person_b, "2026-02-01")):
             connection.execute(
                 text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', :start, 'ACTIVE')"),
                 {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_id, "start": start},
             )
+        # The end date is the inclusive last occupied day. A single-day stay
+        # is valid, a new stay on that same day overlaps, and the next day is
+        # an acceptable successor period.
+        connection.execute(
+            text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, move_out_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', '2030-01-01', '2030-01-01', 'ACTIVE')"),
+            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_c},
+        )
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', '2030-01-01', 'ACTIVE')"),
+                {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_c},
+            )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO occupancy_history (occupancy_id, society_id, unit_id, person_id, occupancy_type, move_in_date, status) VALUES (:id, :society_id, :unit_id, :person_id, 'RESIDENT', '2030-01-02', 'ACTIVE')"),
+            {"id": uuid4(), "society_id": society_id, "unit_id": unit_id, "person_id": person_c},
+        )
 
     with pytest.raises(IntegrityError):
         with engine.begin() as connection:
@@ -404,7 +429,7 @@ def test_active_lease_overlap_and_ownership_share_rules_are_database_enforced(en
                     "(lease_id, society_id, unit_id, tenant_person_id, "
                     "lease_start, lease_end, status) "
                     "VALUES (:id, :society_id, :unit_id, :person_id, "
-                    "'2026-05-01', '2026-07-01', 'ACTIVE')"
+                    "'2026-06-01', '2026-07-01', 'ACTIVE')"
                 ),
                 {
                     "id": uuid4(),
