@@ -204,12 +204,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["unit_id"], ["units.unit_id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["person_id"], ["persons.person_id"], ondelete="RESTRICT"),
     )
-    op.execute(
-        "ALTER TABLE occupancy_history ADD CONSTRAINT ex_occupancy_history_active_unit_dates "
-        "EXCLUDE USING gist (unit_id WITH =, "
-        "daterange(move_in_date, COALESCE(move_out_date, 'infinity'::date), '[]') WITH &&) "
-        "WHERE (status = 'ACTIVE')"
-    )
+    # Do not install the legacy unit-only exclusion here: it rejects valid
+    # concurrent household members while resident rows are being copied.
+    # The review correction installs the person-and-unit exclusion after its
+    # pre-validation, which also supports databases that applied this revision.
     _require_no_values(
         "residents", "move_in_date", "move_in_date IS NULL",
         "resident movement history cannot be preserved without move_in_date; supply dates before retrying",

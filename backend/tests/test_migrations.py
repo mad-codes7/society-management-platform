@@ -8,6 +8,8 @@ from uuid import uuid4
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, inspect, text
+from sqlalchemy.exc import IntegrityError
+import pytest
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -246,4 +248,93 @@ def test_review_corrections_preserve_legacy_role_and_settings_data(engine: Engin
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
 
+        engine.dispose()
+
+
+def test_pre_v2_household_occupancy_migrates_to_head(engine: Engine) -> None:
+    schema_name = f"migration_household_{uuid4().hex}"
+    society_id, building_id, floor_id, unit_type_id, unit_id = (uuid4() for _ in range(5))
+    residents = [(uuid4(), uuid4()), (uuid4(), uuid4())]
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+    previous_pgoptions = os.environ.get("PGOPTIONS")
+    os.environ["PGOPTIONS"] = f"-csearch_path={schema_name}"
+    try:
+        config = Config(str(BACKEND_ROOT / "alembic.ini"))
+        command.upgrade(config, "a1b2c3d4e5f6")
+        with engine.begin() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            connection.execute(text("INSERT INTO societies (society_id,name,status,created_at,updated_at) VALUES (:id,'Household migration','ACTIVE',now(),now())"), {"id": society_id})
+            connection.execute(text("INSERT INTO buildings (building_id,society_id,name,code,building_type,total_floors) VALUES (:id,:society,'A','A','TOWER',1)"), {"id": building_id, "society": society_id})
+            connection.execute(text("INSERT INTO floors (floor_id,building_id,floor_number) VALUES (:id,:building,1)"), {"id": floor_id, "building": building_id})
+            connection.execute(text("INSERT INTO unit_types (unit_type_id,society_id,name) VALUES (:id,:society,'Flat')"), {"id": unit_type_id, "society": society_id})
+            connection.execute(text("INSERT INTO units (unit_id,society_id,building_id,floor_id,unit_type_id,unit_number) VALUES (:id,:society,:building,:floor,:type,'101')"), {"id": unit_id, "society": society_id, "building": building_id, "floor": floor_id, "type": unit_type_id})
+            for index, (person_id, resident_id) in enumerate(residents):
+                connection.execute(text("INSERT INTO persons (person_id,first_name,last_name) VALUES (:id,:first,'Resident')"), {"id": person_id, "first": f"Person{index}"})
+                connection.execute(text("INSERT INTO residents (resident_id,society_id,unit_id,person_id,resident_type,occupancy_status,move_in_date) VALUES (:resident,:society,:unit,:person,'OWNER','ACTIVE','2026-01-01')"), {"resident": resident_id, "society": society_id, "unit": unit_id, "person": person_id})
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            assert connection.execute(text("SELECT count(*) FROM occupancy_history WHERE unit_id=:unit AND status='ACTIVE'"), {"unit": unit_id}).scalar_one() == 2
+            exclusion = connection.execute(text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='occupancy_history'::regclass AND conname='ex_occupancy_history_active_person_unit_dates'")).scalar_one()
+            assert "person_id WITH =" in exclusion
+            assert connection.execute(text("SELECT count(*) FROM pg_constraint WHERE conrelid='occupancy_history'::regclass AND conname='ex_occupancy_history_active_unit_dates'")).scalar_one() == 0
+    finally:
+        if previous_pgoptions is None:
+            os.environ.pop("PGOPTIONS", None)
+        else:
+            os.environ["PGOPTIONS"] = previous_pgoptions
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        engine.dispose()
+
+
+def test_ownership_aggregate_validation_enforces_periods_and_updates(engine: Engine) -> None:
+    schema_name = f"migration_ownership_{uuid4().hex}"
+    society_id, building_id, floor_id, unit_id, unit2_id = (uuid4() for _ in range(5))
+    person_ids = [uuid4() for _ in range(3)]
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+    previous_pgoptions = os.environ.get("PGOPTIONS")
+    os.environ["PGOPTIONS"] = f"-csearch_path={schema_name}"
+    try:
+        config = Config(str(BACKEND_ROOT / "alembic.ini"))
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            connection.execute(text("INSERT INTO societies (society_id,name,status,created_at,updated_at) VALUES (:id,'Ownership migration','ACTIVE',now(),now())"), {"id": society_id})
+            connection.execute(text("INSERT INTO buildings (building_id,society_id,name) VALUES (:id,:society,'A')"), {"id": building_id, "society": society_id})
+            connection.execute(text("INSERT INTO floors (floor_id,building_id,floor_number) VALUES (:id,:building,1)"), {"id": floor_id, "building": building_id})
+            for unit_id_value, number in ((unit_id, "101"), (unit2_id, "102")):
+                connection.execute(text("INSERT INTO units (unit_id,society_id,building_id,floor_id,unit_number) VALUES (:id,:society,:building,:floor,:number)"), {"id": unit_id_value, "society": society_id, "building": building_id, "floor": floor_id, "number": number})
+            for person_id in person_ids:
+                connection.execute(text("INSERT INTO persons (person_id,full_name) VALUES (:id,'Owner')"), {"id": person_id})
+            def ownership(unit, person, share, start, end=None, status="ACTIVE"):
+                connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,end_date,status) VALUES (:id,:society,:unit,:person,:share,:start,:end,:status)"), {"id": uuid4(), "society": society_id, "unit": unit, "person": person, "share": share, "start": start, "end": end, "status": status})
+
+            ownership(unit_id, person_ids[0], 40, "2026-01-01", "2026-01-31")
+            ownership(unit_id, person_ids[1], 60, "2026-01-01", "2026-01-31")
+            ownership(unit_id, person_ids[2], 100, "2026-02-01", "2026-02-28")
+            ownership(unit2_id, person_ids[0], 60, "2026-01-01")
+
+        with pytest.raises(IntegrityError, match="exceed 100%"):
+            with engine.begin() as connection:
+                connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,status) VALUES (:id,:society,:unit,:person,41,'2026-01-15','ACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit_id, "person": person_ids[2]})
+
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO ownerships (ownership_id,society_id,unit_id,person_id,share_percentage,start_date,status) VALUES (:id,:society,:unit,:person,40,'2026-01-01','INACTIVE')"), {"id": uuid4(), "society": society_id, "unit": unit2_id, "person": person_ids[1]})
+        with pytest.raises(IntegrityError, match="exceed 100%"):
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE ownerships SET status='ACTIVE', share_percentage=41 WHERE unit_id=:unit AND person_id=:person"), {"unit": unit2_id, "person": person_ids[1]})
+        with pytest.raises(IntegrityError, match="exceed 100%"):
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE ownerships SET unit_id=:new_unit WHERE unit_id=:unit AND person_id=:person"), {"new_unit": unit_id, "unit": unit2_id, "person": person_ids[0]})
+    finally:
+        if previous_pgoptions is None:
+            os.environ.pop("PGOPTIONS", None)
+        else:
+            os.environ["PGOPTIONS"] = previous_pgoptions
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
         engine.dispose()

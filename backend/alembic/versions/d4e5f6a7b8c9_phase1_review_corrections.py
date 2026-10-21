@@ -109,7 +109,9 @@ def upgrade() -> None:
         ondelete="SET NULL (unit_type_id)",
     )
 
-    op.execute("ALTER TABLE occupancy_history DROP CONSTRAINT ex_occupancy_history_active_unit_dates")
+    # Older installations may have the unit-only exclusion from the original
+    # V2 revision; clean installs no longer create it.
+    op.execute("ALTER TABLE occupancy_history DROP CONSTRAINT IF EXISTS ex_occupancy_history_active_unit_dates")
     _require_no_rows(
         """
         SELECT count(*) FROM occupancy_history a
@@ -138,7 +140,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_occupancy_history_valid_dates",
         "occupancy_history",
-        "move_out_date IS NULL OR move_out_date > move_in_date",
+        "move_out_date IS NULL OR move_out_date >= move_in_date",
     )
 
     _require_no_rows(
@@ -164,14 +166,14 @@ def upgrade() -> None:
         ) WHERE (status = 'ACTIVE')
         """
     )
-    op.create_check_constraint("ck_leases_valid_dates", "leases", "lease_end IS NULL OR lease_end > lease_start")
+    op.create_check_constraint("ck_leases_valid_dates", "leases", "lease_end IS NULL OR lease_end >= lease_start")
 
     op.create_check_constraint(
         "ck_ownerships_share_percentage",
         "ownerships",
         "share_percentage IS NULL OR share_percentage BETWEEN 0 AND 100",
     )
-    op.create_check_constraint("ck_ownerships_valid_dates", "ownerships", "end_date IS NULL OR end_date > start_date")
+    op.create_check_constraint("ck_ownerships_valid_dates", "ownerships", "end_date IS NULL OR end_date >= start_date")
     op.create_check_constraint(
         "ck_society_memberships_valid_dates",
         "society_memberships",
@@ -180,38 +182,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_society_memberships_valid_dates", "society_memberships", type_="check")
-    op.drop_constraint("ck_ownerships_valid_dates", "ownerships", type_="check")
-    op.drop_constraint("ck_ownerships_share_percentage", "ownerships", type_="check")
-    op.drop_constraint("ck_leases_valid_dates", "leases", type_="check")
-    op.execute("ALTER TABLE leases DROP CONSTRAINT ex_leases_active_unit_dates")
-    op.drop_constraint("ck_occupancy_history_valid_dates", "occupancy_history", type_="check")
-    op.execute("ALTER TABLE occupancy_history DROP CONSTRAINT ex_occupancy_history_active_person_unit_dates")
-    op.execute(
-        """
-        ALTER TABLE occupancy_history ADD CONSTRAINT ex_occupancy_history_active_unit_dates
-        EXCLUDE USING gist (
-            unit_id WITH =,
-            daterange(move_in_date, COALESCE(move_out_date, 'infinity'::date), '[]') WITH &&
-        ) WHERE (status = 'ACTIVE')
-        """
+    raise RuntimeError(
+        "Cannot downgrade Phase 1 review corrections safely: restoring the legacy "
+        "unit-only occupancy exclusion rejects valid household occupancy. Restore "
+        "a verified pre-correction backup instead. No downgrade operations were run."
     )
-    op.drop_constraint("units_society_unit_type_fkey", "units", type_="foreignkey")
-    op.create_foreign_key(
-        "units_society_unit_type_fkey", "units", "unit_types",
-        ["society_id", "unit_type_id"], ["society_id", "unit_type_id"], ondelete="SET NULL"
-    )
-    op.drop_column("society_settings", "emergency_config")
-    op.alter_column("society_settings", "due_day", existing_type=sa.SmallInteger(), type_=sa.Integer())
-    op.alter_column("society_settings", "grace_period_days", existing_type=sa.SmallInteger(), type_=sa.Integer())
-    for column in ("visitor_policy", "gate_timing", "late_fee_rule"):
-        op.alter_column(
-            "society_settings", column, existing_type=postgresql.JSONB(), type_=sa.JSON(), postgresql_using=f"{column}::json"
-        )
-    op.drop_constraint("ck_user_roles_valid_dates", "user_roles", type_="check")
-    op.drop_index("ix_user_roles_status", table_name="user_roles")
-    op.drop_column("user_roles", "status")
-    op.drop_column("user_roles", "valid_to")
-    op.drop_column("user_roles", "valid_from")
-    op.drop_constraint("uq_roles_code", "roles", type_="unique")
-    op.drop_column("roles", "code")

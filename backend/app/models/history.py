@@ -13,11 +13,12 @@ from app.models.base import Base, TimestampMixin
 
 
 class Ownership(Base, TimestampMixin):
+    """Ownership dates are inclusive; a successor period starts the next day."""
     __tablename__ = "ownerships"
     __table_args__ = (
         ForeignKeyConstraint(["society_id", "unit_id"], ["units.society_id", "units.unit_id"], ondelete="RESTRICT"),
         CheckConstraint("share_percentage IS NULL OR share_percentage BETWEEN 0 AND 100", name="ck_ownerships_share_percentage"),
-        CheckConstraint("end_date IS NULL OR end_date > start_date", name="ck_ownerships_valid_dates"),
+        CheckConstraint("end_date IS NULL OR end_date >= start_date", name="ck_ownerships_valid_dates"),
     )
 
     ownership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -32,6 +33,7 @@ class Ownership(Base, TimestampMixin):
 
 
 class Lease(Base, TimestampMixin):
+    """Lease end dates are inclusive; a successor lease starts the next day."""
     __tablename__ = "leases"
     __table_args__ = (
         ForeignKeyConstraint(["society_id", "unit_id"], ["units.society_id", "units.unit_id"], ondelete="RESTRICT"),
@@ -50,7 +52,7 @@ class Lease(Base, TimestampMixin):
             name="ex_leases_active_unit_dates",
             using="gist",
         ),
-        CheckConstraint("lease_end IS NULL OR lease_end > lease_start", name="ck_leases_valid_dates"),
+        CheckConstraint("lease_end IS NULL OR lease_end >= lease_start", name="ck_leases_valid_dates"),
     )
 
     lease_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -64,6 +66,7 @@ class Lease(Base, TimestampMixin):
 
 
 class OccupancyHistory(Base, TimestampMixin):
+    """Move-out is the last occupied day; a successor occupancy starts next day."""
     __tablename__ = "occupancy_history"
     __table_args__ = (
         ForeignKeyConstraint(["society_id", "unit_id"], ["units.society_id", "units.unit_id"], ondelete="RESTRICT"),
@@ -86,7 +89,7 @@ class OccupancyHistory(Base, TimestampMixin):
             name="ex_occupancy_history_active_person_unit_dates",
             using="gist",
         ),
-        CheckConstraint("move_out_date IS NULL OR move_out_date > move_in_date", name="ck_occupancy_history_valid_dates"),
+        CheckConstraint("move_out_date IS NULL OR move_out_date >= move_in_date", name="ck_occupancy_history_valid_dates"),
     )
 
     occupancy_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

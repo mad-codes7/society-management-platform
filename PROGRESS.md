@@ -52,11 +52,14 @@ This document tracks all engineering progress, domain models, schema implementat
 
 ---
 
-## 📅 Next Steps & Integration Plan
+## Integrated Phase 1 Status
 
-1. **Alembic Migration:** Generate migration scripts for Property and Resident master data tables.
-2. **Pytest Coverage:** Add unit & API tests in `tests/modules/society/`, `tests/modules/property/`, `tests/modules/residents/`.
-3. **Pull Request:** Open PR from `feat/society-core-domain` into `feat/backend-db-foundation` / `main`.
+The society/property/resident schema, API integration, migrations, and
+PostgreSQL-backed tests are present on the integrated backend branch. This
+progress file is retained as a historical activity log; its dated validation
+section below reflects an earlier branch and must not be read as evidence for
+the current correction branch. Current verified results are recorded after
+validation of this branch.
 
 ---
 
@@ -70,14 +73,19 @@ This document tracks all engineering progress, domain models, schema implementat
 - [x] `git diff --check` completed without whitespace errors.
 - [x] `/api/v1/auth/me` now omits memberships whose `left_at` has passed; regression test added.
 - [x] Clean PostgreSQL migration completed on the dedicated `society_management_codex_uat` database; Alembic reports `d4e5f6a7b8c9 (head)`.
-- [x] Complete PostgreSQL-backed test suite passed: **50 passed**. This includes API integration, tenancy/RBAC, migration reconciliation against representative legacy data, schema constraints and the expired-membership regression.
+- [x] The earlier validation run included PostgreSQL-backed API, tenancy/RBAC, migration, and schema-constraint coverage; its count is omitted because it predates this correction branch.
 - [x] Added API UAT coverage for resident onboarding, detail/list retrieval, family and emergency-contact create/list flows, and cross-society denial.
 - [x] Added PostgreSQL lifecycle coverage for linked and external emergency contacts, vehicle/person/unit deletion behavior, duplicate vehicle registration rejection, and cross-society vehicle/unit FK rejection.
-- [x] Installed dependency check passed in the existing backend environment (`pip check`: no broken requirements); the FastAPI `TestClient`/HTTPX API tests ran as part of the suite. Hosted GitHub Actions has not yet run for this branch.
+- [x] Earlier validation ran FastAPI `TestClient`/HTTPX API tests. Its dependency and hosted CI results do not apply to this correction branch.
 - [x] `compileall` and `git diff --check` passed after the final changes.
 - The pre-existing `society_management_test` database contained a `societies` table and was left untouched. Validation used the fresh dedicated database above.
 
-### Remaining review items before Phase 1 sign-off
+### Current correction branch validation
 
-- The email also asks to define and enforce active ownership-share validation. Existing enforcement rejects an individual share above 100%, but does not check the total across overlapping active ownership rows. Confirm the intended aggregate rule before changing it.
-- The local PostgreSQL API/UAT suite passed all 50 tests. Hosted CI will be checked after the working branch is pushed. Formal stakeholder acceptance should be recorded by the team during its review/demo; it is separate from the automated test result.
+On 2026-10-21, Python compilation and `git diff --check` passed. The
+PostgreSQL suite and clean Alembic upgrade could not run locally: no separate
+`TEST_DATABASE_URL` is configured, Docker Desktop is unavailable, and neither
+local PostgreSQL port 5432 nor 5433 responds. `pip check` reported existing
+environment conflicts in Streamlit/packaging/Pillow and Torch/TorchAudio/
+TorchVision. Hosted GitHub Actions status will be added only after checking
+the workflow run for this branch.
