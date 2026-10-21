@@ -87,8 +87,14 @@ alembic upgrade head
 python -m pytest -q
 ```
 
-The Prototype 1 backend was validated with 34 PostgreSQL tests passing,
-along with a clean Alembic upgrade and successful OpenAPI generation.
+Migration date ranges treat `move_out_date`, `lease_end`, and ownership
+`end_date` as inclusive. A successor occupancy, lease, or ownership period
+starts on the following day. Active ownership shares for each unit are
+validated in aggregate and may not exceed 100% on any covered date.
+
+The PostgreSQL test suite includes migration upgrade regressions and
+database integrity checks. See `PROGRESS.md` for the latest verified local
+test and hosted CI results; no Phase 1 sign-off is implied by these checks.
 
 ## Architecture
 
