@@ -233,6 +233,131 @@ def test_deleting_unit_type_nulls_only_type_id(engine) -> None:
         assert row["unit_type_id"] is None
 
 
+def test_vehicle_and_emergency_contact_lifecycle_constraints(engine) -> None:
+    with engine.begin() as connection:
+        society_id, unit_id, _, person_a, person_b = _property_fixture(connection)
+        resident_id = uuid4()
+        vehicle_id = uuid4()
+        linked_contact_id = uuid4()
+        external_contact_id = uuid4()
+
+        connection.execute(
+            text(
+                "INSERT INTO residents "
+                "(resident_id, society_id, unit_id, person_id, resident_type, is_primary, status) "
+                "VALUES (:resident_id, :society_id, :unit_id, :person_id, 'OWNER', false, 'ACTIVE')"
+            ),
+            {
+                "resident_id": resident_id,
+                "society_id": society_id,
+                "unit_id": unit_id,
+                "person_id": person_b,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO vehicles "
+                "(vehicle_id, society_id, unit_id, person_id, registration_number, vehicle_type, status) "
+                "VALUES (:vehicle_id, :society_id, :unit_id, :person_id, 'MH12-UAT-1234', 'CAR', 'ACTIVE')"
+            ),
+            {
+                "vehicle_id": vehicle_id,
+                "society_id": society_id,
+                "unit_id": unit_id,
+                "person_id": person_a,
+            },
+        )
+        for contact_id, linked_person_id, name in (
+            (linked_contact_id, person_a, "Linked contact"),
+            (external_contact_id, None, "External contact"),
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO emergency_contacts "
+                    "(emergency_contact_id, society_id, resident_id, person_id, name, mobile) "
+                    "VALUES (:contact_id, :society_id, :resident_id, :person_id, :name, '9876543210')"
+                ),
+                {
+                    "contact_id": contact_id,
+                    "society_id": society_id,
+                    "resident_id": resident_id,
+                    "person_id": linked_person_id,
+                    "name": name,
+                },
+            )
+
+    # A deleted person is detached from the vehicle/contact records, preserving those records.
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM persons WHERE person_id = :id"), {"id": person_a})
+        vehicle = connection.execute(
+            text("SELECT person_id, unit_id FROM vehicles WHERE vehicle_id = :id"),
+            {"id": vehicle_id},
+        ).mappings().one()
+        linked_contact = connection.execute(
+            text("SELECT person_id, name FROM emergency_contacts WHERE emergency_contact_id = :id"),
+            {"id": linked_contact_id},
+        ).mappings().one()
+        external_contact = connection.execute(
+            text("SELECT person_id, name FROM emergency_contacts WHERE emergency_contact_id = :id"),
+            {"id": external_contact_id},
+        ).mappings().one()
+
+        assert vehicle["person_id"] is None
+        assert vehicle["unit_id"] == unit_id
+        assert linked_contact["person_id"] is None
+        assert linked_contact["name"] == "Linked contact"
+        assert external_contact["person_id"] is None
+        assert external_contact["name"] == "External contact"
+
+        connection.execute(text("DELETE FROM residents WHERE resident_id = :id"), {"id": resident_id})
+        assert connection.execute(
+            text("SELECT count(*) FROM emergency_contacts WHERE resident_id = :id"),
+            {"id": resident_id},
+        ).scalar_one() == 0
+
+        connection.execute(text("DELETE FROM units WHERE unit_id = :id"), {"id": unit_id})
+        assert connection.execute(
+            text("SELECT count(*) FROM vehicles WHERE vehicle_id = :id"),
+            {"id": vehicle_id},
+        ).scalar_one() == 0
+
+
+def test_vehicles_reject_duplicate_society_registration_and_cross_society_unit(engine) -> None:
+    with engine.begin() as connection:
+        society_a, unit_a, _, person_a, _ = _property_fixture(connection)
+        society_b, unit_b, _, _, _ = _property_fixture(connection)
+        connection.execute(
+            text(
+                "INSERT INTO vehicles "
+                "(vehicle_id, society_id, unit_id, person_id, registration_number, vehicle_type, status) "
+                "VALUES (:id, :society_id, :unit_id, :person_id, 'MH12-UAT-5678', 'CAR', 'ACTIVE')"
+            ),
+            {"id": uuid4(), "society_id": society_a, "unit_id": unit_a, "person_id": person_a},
+        )
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO vehicles "
+                    "(vehicle_id, society_id, unit_id, registration_number, vehicle_type, status) "
+                    "VALUES (:id, :society_id, :unit_id, 'MH12-UAT-5678', 'CAR', 'ACTIVE')"
+                ),
+                {"id": uuid4(), "society_id": society_a, "unit_id": unit_a},
+            )
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO vehicles "
+                    "(vehicle_id, society_id, unit_id, registration_number, vehicle_type, status) "
+                    "VALUES (:id, :society_id, :unit_id, 'MH12-UAT-9999', 'CAR', 'ACTIVE')"
+                ),
+                {"id": uuid4(), "society_id": society_a, "unit_id": unit_b},
+            )
+
+
 def test_active_lease_overlap_and_ownership_share_rules_are_database_enforced(engine) -> None:
     # Set up one flat, two people, an existing lease, and 60% ownership.
     with engine.begin() as connection:
