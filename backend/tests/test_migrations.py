@@ -303,6 +303,162 @@ def test_pre_v2_household_occupancy_migrates_to_head(engine: Engine) -> None:
         engine.dispose()
 
 
+def test_legacy_unit_only_occupancy_constraint_is_replaced_on_upgrade(engine: Engine) -> None:
+    schema_name = f"migration_legacy_occupancy_{uuid4().hex}"
+    society_id, building_id, floor_id, unit_id = (uuid4() for _ in range(4))
+    person_ids = [uuid4(), uuid4()]
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+
+    previous_pgoptions = os.environ.get("PGOPTIONS")
+    os.environ["PGOPTIONS"] = f"-csearch_path={schema_name}"
+    try:
+        config = Config(str(BACKEND_ROOT / "alembic.ini"))
+        command.upgrade(config, "c9d0e1f2a3b4")
+        with engine.begin() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            connection.execute(
+                text(
+                    "INSERT INTO societies (society_id, name, status) "
+                    "VALUES (:id, 'Legacy occupancy migration', 'ACTIVE')"
+                ),
+                {"id": society_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO buildings (building_id, society_id, name, status) "
+                    "VALUES (:id, :society, 'A', 'ACTIVE')"
+                ),
+                {"id": building_id, "society": society_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO floors (floor_id, building_id, floor_number) "
+                    "VALUES (:id, :building, 1)"
+                ),
+                {"id": floor_id, "building": building_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO units "
+                    "(unit_id, society_id, building_id, floor_id, unit_number) "
+                    "VALUES (:id, :society, :building, :floor, '101')"
+                ),
+                {
+                    "id": unit_id,
+                    "society": society_id,
+                    "building": building_id,
+                    "floor": floor_id,
+                },
+            )
+            for person_id in person_ids:
+                connection.execute(
+                    text(
+                        "INSERT INTO persons (person_id, full_name, status) "
+                        "VALUES (:id, 'Legacy Resident', 'ACTIVE')"
+                    ),
+                    {"id": person_id},
+                )
+
+            for person_id, move_in, move_out in (
+                (person_ids[0], "2026-01-01", "2026-01-31"),
+                (person_ids[1], "2026-02-01", None),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO occupancy_history "
+                        "(occupancy_id, society_id, unit_id, person_id, occupancy_type, "
+                        "move_in_date, move_out_date, status) "
+                        "VALUES (:id, :society, :unit, :person, 'RESIDENT', "
+                        ":move_in, :move_out, 'ACTIVE')"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "society": society_id,
+                        "unit": unit_id,
+                        "person": person_id,
+                        "move_in": move_in,
+                        "move_out": move_out,
+                    },
+                )
+
+            legacy_constraint_exists = connection.execute(
+                text(
+                    "SELECT EXISTS ("
+                    "SELECT 1 FROM pg_constraint c "
+                    "JOIN pg_class t ON t.oid = c.conrelid "
+                    "JOIN pg_namespace n ON n.oid = t.relnamespace "
+                    "WHERE n.nspname = :schema_name "
+                    "AND t.relname = 'occupancy_history' "
+                    "AND c.conname = 'ex_occupancy_history_active_unit_dates'"
+                    ")"
+                ),
+                {"schema_name": schema_name},
+            ).scalar_one()
+            if not legacy_constraint_exists:
+                connection.execute(
+                    text(
+                        "ALTER TABLE occupancy_history "
+                        "ADD CONSTRAINT ex_occupancy_history_active_unit_dates "
+                        "EXCLUDE USING gist ("
+                        "society_id WITH =, unit_id WITH =, "
+                        "daterange(move_in_date, "
+                        "COALESCE(move_out_date, 'infinity'::date), '[]') WITH &&"
+                        ") WHERE (status = 'ACTIVE')"
+                    )
+                )
+
+        command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == "f1a2b3c4d5e6"
+            assert connection.execute(
+                text(
+                    "SELECT count(*) FROM occupancy_history "
+                    "WHERE unit_id=:unit AND status='ACTIVE'"
+                ),
+                {"unit": unit_id},
+            ).scalar_one() == 2
+
+            constraint_names = connection.execute(
+                text(
+                    "SELECT c.conname FROM pg_constraint c "
+                    "JOIN pg_class t ON t.oid = c.conrelid "
+                    "JOIN pg_namespace n ON n.oid = t.relnamespace "
+                    "WHERE n.nspname = :schema_name "
+                    "AND t.relname = 'occupancy_history'"
+                ),
+                {"schema_name": schema_name},
+            ).scalars().all()
+            assert "ex_occupancy_history_active_unit_dates" not in constraint_names
+
+            person_unit_constraint = connection.execute(
+                text(
+                    "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+                    "JOIN pg_class t ON t.oid = c.conrelid "
+                    "JOIN pg_namespace n ON n.oid = t.relnamespace "
+                    "WHERE n.nspname = :schema_name "
+                    "AND t.relname = 'occupancy_history' "
+                    "AND c.conname = 'ex_occupancy_history_active_person_unit_dates'"
+                ),
+                {"schema_name": schema_name},
+            ).scalar_one()
+            assert "society_id WITH =" in person_unit_constraint
+            assert "unit_id WITH =" in person_unit_constraint
+            assert "person_id WITH =" in person_unit_constraint
+    finally:
+        if previous_pgoptions is None:
+            os.environ.pop("PGOPTIONS", None)
+        else:
+            os.environ["PGOPTIONS"] = previous_pgoptions
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        engine.dispose()
+
+
 def test_review_corrections_downgrade_requires_pre_correction_backup(engine: Engine) -> None:
     schema_name = f"migration_review_downgrade_{uuid4().hex}"
     with engine.begin() as connection:
@@ -342,6 +498,66 @@ def test_review_corrections_downgrade_requires_pre_correction_backup(engine: Eng
                     "AND conname='ex_occupancy_history_active_person_unit_dates'"
                 )
             ).scalar_one() == 1
+    finally:
+        if previous_pgoptions is None:
+            os.environ.pop("PGOPTIONS", None)
+        else:
+            os.environ["PGOPTIONS"] = previous_pgoptions
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("revision", "downgrade_target", "expected_error"),
+    [
+        (
+            "b7c8d9e0f1a2",
+            "a1b2c3d4e5f6",
+            "Phase 1 V2 downgrade is intentionally blocked: it would discard "
+            "migrated ownership, lease, occupancy, vehicle, and identity data. "
+            "Restore a pre-V2 backup instead.",
+        ),
+        (
+            "e7f8a9b0c1d2",
+            "d4e5f6a7b8c9",
+            "Cannot downgrade aggregate ownership validation safely. Restore a "
+            "verified pre-migration backup instead; no downgrade operations were run.",
+        ),
+        (
+            "f1a2b3c4d5e6",
+            "e7f8a9b0c1d2",
+            "Cannot downgrade deferred ownership validation safely. Restore a "
+            "verified pre-migration backup instead; no downgrade operations were run.",
+        ),
+    ],
+    ids=["v2-core", "ownership-aggregate", "deferred-ownership"],
+)
+def test_forward_only_migrations_reject_downgrade_without_revision_change(
+    engine: Engine,
+    revision: str,
+    downgrade_target: str,
+    expected_error: str,
+) -> None:
+    schema_name = f"migration_blocked_downgrade_{uuid4().hex}"
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+
+    previous_pgoptions = os.environ.get("PGOPTIONS")
+    os.environ["PGOPTIONS"] = f"-csearch_path={schema_name}"
+    try:
+        config = Config(str(BACKEND_ROOT / "alembic.ini"))
+        command.upgrade(config, revision)
+
+        with pytest.raises(RuntimeError) as error:
+            command.downgrade(config, downgrade_target)
+
+        assert str(error.value) == expected_error
+        with engine.connect() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == revision
     finally:
         if previous_pgoptions is None:
             os.environ.pop("PGOPTIONS", None)

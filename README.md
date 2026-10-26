@@ -112,7 +112,9 @@ The Phase 1 correction migrations are forward-only. Their downgrade operations
 intentionally fail with actionable errors rather than restoring unsafe
 constraints or silently undoing corrections. To recover, restore a verified
 backup from before the applicable correction migrations; no safe in-place
-downgrade is provided.
+downgrade is provided. See the
+[Phase 1 V2 migration runbook](./docs/phase1-migration-runbook.md) for clean
+installation, backup, rollback, test database safety, and deployment checks.
 
 The PostgreSQL test suite includes migration upgrade regressions and
 database integrity checks. See [PROGRESS.md](./PROGRESS.md) for the latest
