@@ -278,10 +278,70 @@ def test_pre_v2_household_occupancy_migrates_to_head(engine: Engine) -> None:
         command.upgrade(config, "head")
         with engine.connect() as connection:
             connection.execute(text(f'SET search_path TO "{schema_name}"'))
-            assert connection.execute(text("SELECT count(*) FROM occupancy_history WHERE unit_id=:unit AND status='ACTIVE'"), {"unit": unit_id}).scalar_one() == 2
+            migrated_people = set(
+                connection.execute(
+                    text(
+                        "SELECT person_id FROM occupancy_history "
+                        "WHERE unit_id=:unit AND status='ACTIVE'"
+                    ),
+                    {"unit": unit_id},
+                ).scalars()
+            )
+            assert migrated_people == {person_id for person_id, _ in residents}
             exclusion = connection.execute(text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='occupancy_history'::regclass AND conname='ex_occupancy_history_active_person_unit_dates'")).scalar_one()
+            assert "society_id WITH =" in exclusion
+            assert "unit_id WITH =" in exclusion
             assert "person_id WITH =" in exclusion
             assert connection.execute(text("SELECT count(*) FROM pg_constraint WHERE conrelid='occupancy_history'::regclass AND conname='ex_occupancy_history_active_unit_dates'")).scalar_one() == 0
+    finally:
+        if previous_pgoptions is None:
+            os.environ.pop("PGOPTIONS", None)
+        else:
+            os.environ["PGOPTIONS"] = previous_pgoptions
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        engine.dispose()
+
+
+def test_review_corrections_downgrade_requires_pre_correction_backup(engine: Engine) -> None:
+    schema_name = f"migration_review_downgrade_{uuid4().hex}"
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+
+    previous_pgoptions = os.environ.get("PGOPTIONS")
+    os.environ["PGOPTIONS"] = f"-csearch_path={schema_name}"
+    try:
+        config = Config(str(BACKEND_ROOT / "alembic.ini"))
+        command.upgrade(config, "d4e5f6a7b8c9")
+
+        with pytest.raises(RuntimeError) as error:
+            command.downgrade(config, "c9d0e1f2a3b4")
+
+        assert str(error.value) == (
+            "Cannot downgrade Phase 1 review corrections safely: restoring the legacy "
+            "unit-only occupancy exclusion rejects valid household occupancy. Restore "
+            "a verified pre-correction backup instead. No downgrade operations were run."
+        )
+
+        with engine.connect() as connection:
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == "d4e5f6a7b8c9"
+            assert connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_constraint "
+                    "WHERE conrelid='occupancy_history'::regclass "
+                    "AND conname='ex_occupancy_history_active_unit_dates'"
+                )
+            ).scalar_one() == 0
+            assert connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_constraint "
+                    "WHERE conrelid='occupancy_history'::regclass "
+                    "AND conname='ex_occupancy_history_active_person_unit_dates'"
+                )
+            ).scalar_one() == 1
     finally:
         if previous_pgoptions is None:
             os.environ.pop("PGOPTIONS", None)

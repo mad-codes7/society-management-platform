@@ -52,28 +52,45 @@ This document tracks all engineering progress, domain models, schema implementat
 
 ---
 
-## Latest Verified Phase 1 Validation
+## Migration Compatibility and Latest Verification
 
-**Integration branch:** `feat/backend-db-foundation`, merge commit `d043db8`
-(PR #8 merged 2026-10-21).
+- The V2 society-core migration ordering is fixed: the legacy unit-only active
+  occupancy exclusion is not installed before resident-history backfill. The
+  correction migration removes it if present, checks for overlapping active
+  records for the same person and unit, and creates the intended person-and-
+  unit exclusion. The migration regression starts at `a1b2c3d4e5f6`, creates
+  two active residents for one unit, upgrades to head, and checks both
+  migrated people and both constraint names.
+- Active ownership shares are checked in aggregate across overlapping dates.
+  A transaction-scoped advisory lock serializes ownership writes, and deferred
+  database validation checks the final committed state. The PostgreSQL
+  regression exercises concurrent writes and asserts that only a valid total
+  commits.
+- `move_out_date`, `lease_end`, and ownership `end_date` are inclusive. A
+  successor occupancy, lease, or ownership period begins on the following
+  day.
+- Correction migrations intentionally reject unsafe downgrade attempts with
+  actionable `RuntimeError` messages. Restoration requires a verified backup
+  from before the applicable correction migration; they do not attempt to
+  recreate the unsafe unit-only occupancy constraint.
 
-- GitHub Actions [Backend tests run #27](https://github.com/mad-codes7/society-management-platform/actions/runs/39624909344): **success**.
-- The workflow installed `backend/requirements.txt`, performed a clean `alembic upgrade head` through `e7f8a9b0c1d2`, then ran the complete PostgreSQL suite: **52 passed, 1 warning in 9.82s** (from the job log).
-- The suite includes the pre-V2 overlapping-household migration regression, aggregate ownership share checks, overlapping leases, unit-type deletion, and API/tenancy/RBAC coverage.
-- The hosted dependency installation succeeded. The workflow does not run `pip check`.
+The latest successful GitHub Actions workflow currently available is
+[Backend tests run #30](https://github.com/mad-codes7/society-management-platform/actions/runs/39628797170),
+on merge commit `a392c000e3eeac800650b19f7ac63b0c3d168021` (2026-10-21 UTC).
+Its clean Alembic upgrade and PostgreSQL test job succeeded; the pytest log
+reports **52 passed, 1 warning in 13.47s**. This run predates the edits in
+this worktree and is not evidence that those edits have passed CI. The pytest
+warning is Starlette's deprecation notice about using `httpx` with
+`starlette.testclient`.
 
-## Local Audit Branch
+## Current Worktree Test Attempts
 
-The follow-up audit is on local branch `fix/phase1-final-review`, based on
-`d043db8`. Its additional concurrency and inclusive-date regression tests are
-not part of run #27. Local PostgreSQL is unavailable because `TEST_DATABASE_URL`
-is unset, Docker Desktop is unavailable, and ports 5432/5433 do not respond.
-The backend virtual environment passes `pip check` with no broken requirements.
-`compileall`, `git diff --check`, and Alembic history parsing pass; the latter
-reports `f1a2b3c4d5e6` as the single head. `pytest` stops at collection because
-the required dedicated `TEST_DATABASE_URL` is unset; no local PostgreSQL tests
-ran. The audit-branch tests and new forward migration remain unverified on
-PostgreSQL until a database is available or a hosted run is authorized.
+From `backend`, both `python -m pytest -q tests/test_migrations.py` and
+`python -m pytest -q` were attempted. Both stopped while loading
+`tests/conftest.py` because `TEST_DATABASE_URL` is unset; zero tests were
+collected or executed, and the safety check confirms no database connections
+were started. The Docker executable is present, but its daemon is unavailable.
+No developer or production database was contacted.
 
-These automated results do not constitute stakeholder acceptance or Phase 1
-sign-off.
+Automated migration checks are not Phase 1 completion, stakeholder acceptance,
+or sign-off.
