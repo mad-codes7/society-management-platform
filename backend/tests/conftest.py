@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
+import sys
 from typing import Iterator
 from uuid import uuid4
 
@@ -128,6 +130,69 @@ def engine():
         cleanup_engine.dispose()
 
 
+@pytest.fixture(scope="module")
+def migrated_engine() -> Iterator:
+    """Create an isolated PostgreSQL schema using the actual Alembic chain."""
+    database_url = _test_url
+    if database_url.drivername == "postgresql":
+        database_url = database_url.set(drivername="postgresql+psycopg")
+
+    schema_name = f"pytest_migrated_{uuid4().hex}"
+    bootstrap_engine = create_engine(database_url, pool_pre_ping=True)
+    with bootstrap_engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public"))
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+    bootstrap_engine.dispose()
+
+    migration_environment = os.environ.copy()
+    migration_environment["PGOPTIONS"] = f"-csearch_path={schema_name},public"
+    migration = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            "alembic.ini",
+            "upgrade",
+            "head",
+        ],
+        cwd=BACKEND_ROOT,
+        env=migration_environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if migration.returncode != 0:
+        cleanup_engine = create_engine(database_url, pool_pre_ping=True)
+        with cleanup_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        cleanup_engine.dispose()
+        pytest.fail(
+            "Alembic upgrade head failed in isolated migrated test schema.\n"
+            f"stdout:\n{migration.stdout}\nstderr:\n{migration.stderr}"
+        )
+
+    test_engine = create_engine(database_url, pool_pre_ping=True)
+
+    @event.listens_for(test_engine, "checkout")
+    def set_migrated_schema(dbapi_connection, _connection_record, _connection_proxy) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path TO "{schema_name}", public')
+        finally:
+            cursor.close()
+        dbapi_connection.commit()
+
+    try:
+        yield test_engine
+    finally:
+        test_engine.dispose()
+        cleanup_engine = create_engine(database_url, pool_pre_ping=True)
+        with cleanup_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        cleanup_engine.dispose()
+
+
 @pytest.fixture
 def db_session(engine) -> Iterator[Session]:
     connection = engine.connect()
@@ -146,12 +211,45 @@ def db_session(engine) -> Iterator[Session]:
 
 
 @pytest.fixture
+def migrated_db_session(migrated_engine) -> Iterator[Session]:
+    connection = migrated_engine.connect()
+    transaction = connection.begin()
+    session = Session(
+            bind=connection,
+            join_transaction_mode="create_savepoint",
+    )
+    try:
+            yield session
+    finally:
+            session.close()
+            if transaction.is_active:
+                transaction.rollback()
+            connection.close()
+
+
+@pytest.fixture
 def client(db_session: Session) -> Iterator[TestClient]:
     from app.core.database import get_db
     from app.main import app
 
     def override_get_db() -> Iterator[Session]:
         yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def migrated_client(migrated_db_session: Session) -> Iterator[TestClient]:
+    from app.core.database import get_db
+    from app.main import app
+
+    def override_get_db() -> Iterator[Session]:
+        yield migrated_db_session
 
     app.dependency_overrides[get_db] = override_get_db
     try:
