@@ -83,20 +83,46 @@ Configure the normal and test database URLs using
 From `backend`:
 
 ``` bash
-alembic upgrade head
 python -m pytest -q
 ```
 
-Migration date ranges treat `move_out_date`, `lease_end`, and ownership
-`end_date` as inclusive. A successor occupancy, lease, or ownership period
-starts on the following day. Active ownership shares for each unit are
-validated in aggregate and may not exceed 100% on any covered date.
+The test configuration must set `TEST_DATABASE_URL` to a dedicated PostgreSQL
+test database, different from `DATABASE_URL`. The test harness checks that
+they are separate before connecting, then directs test connections to
+`TEST_DATABASE_URL` and uses isolated schemas. Do not run `alembic upgrade
+head` as a test setup step against a normal or production database.
+
+## Phase 1 Migration Compatibility
+
+The V2 society-core migration ordering no longer installs the obsolete
+unit-only active-occupancy exclusion before resident history is backfilled.
+The following correction removes that legacy constraint when present, checks
+for conflicting same-person records, and installs the intended society,
+unit, and person exclusion. The migration regression starts from revision
+`a1b2c3d4e5f6` (immediately before the V2 society-core migration), backfills
+two active residents of the same unit, and upgrades to Alembic head.
+
+`move_out_date`, `lease_end`, and ownership `end_date` are inclusive: an
+occupancy, lease, or ownership successor starts the following day. Active
+ownership shares are validated in aggregate for overlapping periods and may
+not exceed 100%; database-side serialization and deferred validation protect
+this rule from concurrent writes.
+
+The Phase 1 correction migrations are forward-only. Their downgrade operations
+intentionally fail with actionable errors rather than restoring unsafe
+constraints or silently undoing corrections. To recover, restore a verified
+backup from before the applicable correction migrations; no safe in-place
+downgrade is provided.
 
 The PostgreSQL test suite includes migration upgrade regressions and
-database integrity checks. See `PROGRESS.md` for the latest verified local
-test and hosted CI results; no Phase 1 sign-off is implied by these checks.
+database integrity checks. See [PROGRESS.md](./PROGRESS.md) for the latest
+successful GitHub Actions result and local verification status. These checks
+do not imply Phase 1 completion or sign-off.
 
-The latest verified integration run is [GitHub Actions run #27](https://github.com/mad-codes7/society-management-platform/actions/runs/39624909344): clean Alembic upgrade and **52 passed, 1 warning**. This result is for integration commit `d043db8` after PR #8; local audit-branch changes are not included in that run.
+The latest successful run currently recorded is
+[Backend tests run #30](https://github.com/mad-codes7/society-management-platform/actions/runs/39628797170):
+**52 passed, 1 warning**. It predates the current worktree changes and does
+not verify them.
 
 ## Architecture
 
