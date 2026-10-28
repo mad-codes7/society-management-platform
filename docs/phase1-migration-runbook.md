@@ -10,7 +10,7 @@
    when preparing a test installation.
 3. From `backend`, apply the complete migration chain:
 
-   ```powershell
+   ```bash
    alembic upgrade head
    ```
 
@@ -61,7 +61,7 @@ production application database.
 
 From `backend`, run the focused migration tests and then the full suite:
 
-```powershell
+```bash
 python -m pytest -q tests/test_migrations.py
 python -m pytest -q
 ```
