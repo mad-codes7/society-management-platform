@@ -11,11 +11,11 @@ class OccupancyCheckIn(BaseModel):
     unit_id: UUID
     person_id: UUID
     occupancy_type: str = Field(min_length=1, max_length=20)
-    move_in_date: str
+    move_in_date: date
 
 
 class OccupancyCheckOut(BaseModel):
-    move_out_date: str
+    move_out_date: date | None = None
 
 
 class OccupancyResponse(BaseModel):
