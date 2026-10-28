@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import date
 from typing import Optional
 from uuid import UUID
@@ -19,20 +18,20 @@ class OccupancyService:
     def __init__(self, repository: Optional[OccupancyRepository] = None) -> None:
         self.repository = repository or OccupancyRepository()
 
-    @staticmethod
-    def _parse_date(value: str, field_name: str) -> date:
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{field_name} must be a valid ISO date (YYYY-MM-DD).",
-            )
-        try:
-            return date.fromisoformat(value)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{field_name} must be a valid ISO date (YYYY-MM-DD).",
-            ) from None
+    # @staticmethod
+    # def _parse_date(value: str, field_name: str) -> date:
+    #     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+    #         raise HTTPException(
+    #             status_code=status.HTTP_400_BAD_REQUEST,
+    #             detail=f"{field_name} must be a valid ISO date (YYYY-MM-DD).",
+    #         )
+    #     try:
+    #         return date.fromisoformat(value)
+    #     except ValueError:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_400_BAD_REQUEST,
+    #             detail=f"{field_name} must be a valid ISO date (YYYY-MM-DD).",
+    #         ) from None
 
     @staticmethod
     def _is_occupancy_exclusion_violation(error: IntegrityError) -> bool:
@@ -49,7 +48,7 @@ class OccupancyService:
         data: OccupancyCheckIn,
         actor_user_id: UUID,
     ) -> OccupancyHistory:
-        move_in_date = self._parse_date(data.move_in_date, "move_in_date")
+        move_in_date = data.move_in_date
         if self.repository.get_unit(db, society_id, data.unit_id) is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -109,10 +108,10 @@ class OccupancyService:
         db: Session,
         society_id: UUID,
         occupancy_id: UUID,
-        move_out_date_value: str,
+        move_out_date_value: date,
         actor_user_id: UUID,
     ) -> OccupancyHistory:
-        move_out_date = self._parse_date(move_out_date_value, "move_out_date")
+        move_out_date = move_out_date_value
         occupancy = self.repository.get(db, society_id, occupancy_id)
         if occupancy is None:
             raise HTTPException(
