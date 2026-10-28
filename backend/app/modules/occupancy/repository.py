@@ -39,6 +39,7 @@ class OccupancyRepository:
             is not None
         )
 
+
     def has_overlapping_record(
         self,
         db: Session,
@@ -54,7 +55,6 @@ class OccupancyRepository:
                     OccupancyHistory.society_id == society_id,
                     OccupancyHistory.unit_id == unit_id,
                     OccupancyHistory.person_id == person_id,
-                    OccupancyHistory.status == "ACTIVE",
                     (
                         OccupancyHistory.move_out_date.is_(None)
                         | (OccupancyHistory.move_out_date >= move_in_date)
@@ -64,6 +64,7 @@ class OccupancyRepository:
             )
             is not None
         )
+
 
     def create(self, db: Session, occupancy: OccupancyHistory) -> OccupancyHistory:
         db.add(occupancy)
