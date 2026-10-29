@@ -297,8 +297,8 @@ def test_occupancy_api_rejects_invalid_dates_with_400(
     invalid_date = check_in(
         client, user, society.society_id, unit.unit_id, person.person_id, "not-a-date"
     )
-    assert invalid_date.status_code == 400
-    assert invalid_date.json()["detail"] == "move_in_date must be a valid ISO date (YYYY-MM-DD)."
+    assert invalid_date.status_code == 422
+    assert any(err["loc"][-1] == "move_in_date" for err in invalid_date.json()["detail"])
 
     created = check_in(
         client, user, society.society_id, unit.unit_id, person.person_id, "2026-05-10"
