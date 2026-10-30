@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
+import sys
 from typing import Iterator
 from uuid import uuid4
 
@@ -122,6 +124,71 @@ def engine():
         yield test_engine
     finally:
         test_engine.dispose()
+        cleanup_engine = create_engine(database_url, pool_pre_ping=True)
+        with cleanup_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        cleanup_engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def alembic_engine() -> Iterator:
+    """Create an isolated schema using the actual Alembic migration chain."""
+    database_url = _test_url
+    if database_url.drivername == "postgresql":
+        database_url = database_url.set(drivername="postgresql+psycopg")
+
+    schema_name = f"pytest_migrated_{uuid4().hex}"
+    bootstrap_engine = create_engine(database_url, pool_pre_ping=True)
+    with bootstrap_engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public"))
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+    bootstrap_engine.dispose()
+
+    environment = os.environ.copy()
+    environment["PGOPTIONS"] = f"-csearch_path={schema_name},public"
+    migration = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            "alembic.ini",
+            "upgrade",
+            "head",
+        ],
+        cwd=BACKEND_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if migration.returncode != 0:
+        cleanup_engine = create_engine(database_url, pool_pre_ping=True)
+        with cleanup_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+        cleanup_engine.dispose()
+        pytest.fail(
+            "Alembic upgrade head failed in isolated migrated test schema.\n"
+            f"stdout:\n{migration.stdout}\nstderr:\n{migration.stderr}"
+        )
+
+    migrated_engine = create_engine(database_url, pool_pre_ping=True)
+
+    @event.listens_for(migrated_engine, "checkout")
+    def set_migrated_test_schema(
+        dbapi_connection, _connection_record, _connection_proxy
+    ) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path TO "{schema_name}", public')
+        finally:
+            cursor.close()
+        dbapi_connection.commit()
+
+    try:
+        yield migrated_engine
+    finally:
+        migrated_engine.dispose()
         cleanup_engine = create_engine(database_url, pool_pre_ping=True)
         with cleanup_engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))

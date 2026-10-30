@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.modules.auth.router import router as auth_router
 from app.modules.audit.router import router as audit_router
+from app.modules.leases.router import router as lease_router
 from app.modules.ownership.router import router as ownership_router
 from app.modules.property.router import router as property_router
 from app.modules.residents.router import router as resident_router
@@ -17,6 +18,7 @@ app = FastAPI(
 
 app.include_router(society_router)
 app.include_router(property_router)
+app.include_router(lease_router)
 app.include_router(ownership_router)
 app.include_router(resident_router)
 app.include_router(occupancy_router)
