@@ -1,96 +1,55 @@
-# Member 3 (Society Core) – Development Progress & Activity Log
+# Society Management Platform — Phase 1 Progress
 
-**Owner:** Chinmay Khiste (Member 3 – Society Core Lead)  
-**Branch:** `feat/society-core-domain`  
-**Repository:** `https://github.com/mad-codes7/society-management-platform.git`
+This project-level report records the Phase 1 V2 migration safeguards and
+verification currently evidenced by the migration code, tests, and available
+CI results. It is not a Phase 1 completion or stakeholder sign-off.
 
----
+## Project status
 
-## 📌 Development Summary
+- The FastAPI application registers society, property, resident, authentication,
+  RBAC, and audit routers.
+- V2 migrations create ownership, lease, occupancy-history, and vehicle
+  tables. They do not yet provide complete authenticated API workflows for
+  ownership management, lease lifecycle, occupancy move-out/history, or
+  vehicle registration.
+- The V2 migration path converts resident movement into occupancy history.
+  The correction migration removes the legacy unit-only active-occupancy
+  exclusion, validates same-person overlaps, and installs the society/unit/
+  person exclusion.
+- Active ownership-share totals are validated across overlapping periods.
+  Database advisory-lock serialization and deferred validation protect the
+  aggregate rule during concurrent writes.
+- `move_out_date`, `lease_end`, and ownership `end_date` are inclusive; a
+  successor period begins the following day.
+- The V2 core and correction migrations use forward-only downgrade guards.
+  The migration runbook documents blocked revisions and the backup-restore
+  recovery policy.
 
-This document tracks all engineering progress, domain models, schema implementations, API endpoints, and test coverage for the **Society Core** module in accordance with the project's **Development Blueprint v1** and **Phase 1 V2 Database Specifications**.
+## Verification
 
----
+### Current local worktree
 
-## 🎯 Scope & Deliverables
+Both commands ran from `backend` against the dedicated PostgreSQL
+`society_management_test` database. The test harness confirmed it was separate
+from `DATABASE_URL` and created/dropped isolated test schemas.
 
-- [x] **Repository Environment Setup:**
-  - Branch created: `feat/society-core-domain` (completely isolated from Member 1's `feat/backend-db-foundation`).
-  - Local database environment file `.env` created and added to `.gitignore`.
-  - `.env.example` created as a template for team environment reproducibility.
+- `python -m pytest -q tests/test_migrations.py` — **11 passed in 13.47s**.
+- `python -m pytest -q` — **57 passed in 35.64s**.
+- No pytest warnings or failures were reported in these runs.
+- `git diff --check` — passed.
 
-- [x] **Database Schema & SQLAlchemy Models Implementation (Phase 1 V2 Spec):**
-  - **Society & Settings:** `Society` and `SocietySetting` (1:1 relationship with operational/billing settings).
-  - **Property Hierarchy:** `Building`, `Floor`, `UnitType`, `Unit` (`societies` → `buildings` → `floors` → `units`).
-  - **People & Resident Master Data:** Centralized `Person` table, `Resident` mapping model (OWNER, TENANT, FAMILY_MEMBER), `FamilyMember`, and `EmergencyContact`.
+Before this hardening increment, the recorded local result was **7 migration
+tests and 53 total PostgreSQL tests passed**. This increment adds one
+legacy-database compatibility case and three parameterized blocked-downgrade
+cases; the current counts above include those four additional test cases.
 
-- [x] **Backend Modular Monolith Architecture Setup:**
-  - Implemented standard layered pattern: **Router → Schema → Service → Repository → SQLAlchemy → PostgreSQL**.
-  - `backend/app/models/`: Modularized model files (`society.py`, `property.py`, `person.py`).
-  - `backend/app/modules/`: Modular business logic, request validation schemas, and database interaction repositories.
+### Historical hosted CI
 
----
+[GitHub Actions Backend tests run #30](https://github.com/mad-codes7/society-management-platform/actions/runs/39628797170)
+is a historical result on PostgreSQL 16. Its workflow applied a clean upgrade
+through `f1a2b3c4d5e6`, then reported **52 passed, 1 warning in 13.47s**. The
+warning was Starlette's deprecation notice about using `httpx` with
+`starlette.testclient`. This run predates the current worktree changes and is
+not CI verification of them.
 
-## 📋 Progress Tracker by Feature / User Story
-
-| Story ID | Description | Status | Primary Owner | Target Branch |
-| :--- | :--- | :--- | :--- | :--- |
-| **P1-02** | Create Society (`POST /api/v1/societies`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
-| **P1-03** | View/List/Search Societies (`GET /api/v1/societies`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
-| **P1-04** | Update Society (`PATCH /api/v1/societies/{id}`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
-| **P1-05** | Activate/Suspend Society (`PATCH /api/v1/societies/{id}/activate`, `/suspend`) | ✅ Complete | Member 3 | `feat/society-core-domain` |
-| **P1-PROP** | Property Hierarchy (Buildings, Floors, Unit Types, Units) | ✅ Complete | Member 3 | `feat/society-core-domain` |
-| **P1-RES** | People Master & Resident Relationships | ✅ Complete | Member 3 | `feat/society-core-domain` |
-
----
-
-## 🔒 Security & Sensitive Data Verification
-
-- [x] `.env` verified inside `.gitignore`. Secrets and database passwords remain local.
-- [x] No hardcoded JWT secrets, database credentials, or private keys in source code.
-- [x] Server-side authorization and tenant isolation ready to integrate with Member 2 (Auth) and Member 4 (RBAC).
-
----
-
-## Migration Compatibility and Latest Verification
-
-- The V2 society-core migration ordering is fixed: the legacy unit-only active
-  occupancy exclusion is not installed before resident-history backfill. The
-  correction migration removes it if present, checks for overlapping active
-  records for the same person and unit, and creates the intended person-and-
-  unit exclusion. The migration regression starts at `a1b2c3d4e5f6`, creates
-  two active residents for one unit, upgrades to head, and checks both
-  migrated people and both constraint names.
-- Active ownership shares are checked in aggregate across overlapping dates.
-  A transaction-scoped advisory lock serializes ownership writes, and deferred
-  database validation checks the final committed state. The PostgreSQL
-  regression exercises concurrent writes and asserts that only a valid total
-  commits.
-- `move_out_date`, `lease_end`, and ownership `end_date` are inclusive. A
-  successor occupancy, lease, or ownership period begins on the following
-  day.
-- Correction migrations intentionally reject unsafe downgrade attempts with
-  actionable `RuntimeError` messages. Restoration requires a verified backup
-  from before the applicable correction migration; they do not attempt to
-  recreate the unsafe unit-only occupancy constraint.
-
-The latest successful GitHub Actions workflow currently available is
-[Backend tests run #30](https://github.com/mad-codes7/society-management-platform/actions/runs/39628797170),
-on merge commit `a392c000e3eeac800650b19f7ac63b0c3d168021` (2026-10-21 UTC).
-Its clean Alembic upgrade and PostgreSQL test job succeeded; the pytest log
-reports **52 passed, 1 warning in 13.47s**. This run predates the edits in
-this worktree and is not evidence that those edits have passed CI. The pytest
-warning is Starlette's deprecation notice about using `httpx` with
-`starlette.testclient`.
-
-## Current Worktree Test Attempts
-
-From `backend`, both `python -m pytest -q tests/test_migrations.py` and
-`python -m pytest -q` were attempted. Both stopped while loading
-`tests/conftest.py` because `TEST_DATABASE_URL` is unset; zero tests were
-collected or executed, and the safety check confirms no database connections
-were started. The Docker executable is present, but its daemon is unavailable.
-No developer or production database was contacted.
-
-Automated migration checks are not Phase 1 completion, stakeholder acceptance,
-or sign-off.
+Automated checks do not establish Phase 1 completion or sign-off.

@@ -193,6 +193,12 @@ def migrated_engine() -> Iterator:
         cleanup_engine.dispose()
 
 
+@pytest.fixture(scope="module")
+def alembic_engine(migrated_engine) -> Iterator:
+    """Alias for lease workflow tests expecting alembic_engine."""
+    yield migrated_engine
+
+
 @pytest.fixture
 def db_session(engine) -> Iterator[Session]:
     connection = engine.connect()
@@ -215,16 +221,16 @@ def migrated_db_session(migrated_engine) -> Iterator[Session]:
     connection = migrated_engine.connect()
     transaction = connection.begin()
     session = Session(
-            bind=connection,
-            join_transaction_mode="create_savepoint",
+        bind=connection,
+        join_transaction_mode="create_savepoint",
     )
     try:
-            yield session
+        yield session
     finally:
-            session.close()
-            if transaction.is_active:
-                transaction.rollback()
-            connection.close()
+        session.close()
+        if transaction.is_active:
+            transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture
