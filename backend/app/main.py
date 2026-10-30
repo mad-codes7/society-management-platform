@@ -9,6 +9,7 @@ from app.modules.residents.router import router as resident_router
 from app.modules.occupancy.router import router as occupancy_router
 from app.modules.rbac.router import router as rbac_router
 from app.modules.society.router import router as society_router
+from app.modules.vehicles.router import router as vehicle_router
 
 app = FastAPI(
     title="Society Management Platform API",
@@ -21,6 +22,7 @@ app.include_router(property_router)
 app.include_router(lease_router)
 app.include_router(ownership_router)
 app.include_router(resident_router)
+app.include_router(vehicle_router)
 app.include_router(occupancy_router)
 app.include_router(auth_router)
 app.include_router(audit_router)
